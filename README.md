@@ -33,6 +33,29 @@ para Windows.
    python main.py
    ```
 
+## Inicialización de la base de datos
+
+El repositorio incluye scripts SQL de referencia en la carpeta `db/` para
+crear el esquema principal, las extensiones de inventario y poblar datos
+catálogo básicos. La secuencia recomendada es la siguiente:
+
+```bash
+mysql -u usuario -p floreriadb < db/schema.sql
+mysql -u usuario -p floreriadb < db/extension.sql
+mysql -u usuario -p floreriadb < db/seed.sql
+```
+
+Si se prefiere automatizar la verificación de tablas antes de ejecutar los
+scripts, utilice el comando:
+
+```bash
+python -m app.db.migrate --user usuario --password ****** --host 127.0.0.1 --database floreriadb
+```
+
+El script `app.db.migrate` revisa la presencia de las tablas definidas en
+`db/schema.sql` y `db/extension.sql`, ejecutando los archivos que falten en
+el orden correcto y registrando el resultado en consola.
+
 ## Variables de entorno requeridas
 
 La aplicación lee su configuración desde variables de entorno para localizar el archivo de 
