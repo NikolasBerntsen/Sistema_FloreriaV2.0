@@ -1,6 +1,6 @@
 
 Resumen ejecutivo
-Aplicacion de Gestion de Clientes y Ventas con MySQL que centraliza clientes, productos, pedidos, pagos y envios. Incluye dashboard de indicadores, busqueda avanzada por cliente y periodo, cuentas por cobrar (con estado de deuda, pagos parciales y vencimientos), creacion de pedidos con alta rapida de productos en el flujo, navegacion fluida (atras/adelante/inicio) y una arquitectura modular lista para escalar. Se especifican requerimientos funcionales, no funcionales y tecnicos, un modelo de datos propuesto (MySQL), endpoints REST v1 y criterios de aceptacion base.
+Aplicacion de Gestion de Clientes y Ventas con MySQL que centraliza clientes, productos, pedidos, pagos y envios. Incluye dashboard de indicadores, busqueda avanzada por cliente y periodo, cuentas por cobrar (con estado de deuda, pagos parciales y vencimientos), creacion de pedidos con alta rapida de productos en el flujo, navegacion fluida (atras/adelante/inicio) y una arquitectura modular lista para escalar. Se especifican requerimientos funcionales, no funcionales y tecnicos, un modelo de datos propuesto (MySQL), endpoints REST v1 y criterios de aceptacion base. Se agregan capacidades de personalizacion de interfaz (logo/nombre, comportamiento de barra lateral, hover sticky) y un flujo offline de pedidos con sincronizacion automatica al recuperar conectividad, soportado por configuraciones obtenidas via API y un puente de integracion con el cliente.
 
 1) Objetivo y alcance
 - Objetivo: construir un sistema modular para registrar y consultar clientes, productos, pedidos (con items), pagos y estados de envio, con analitica de negocio.
@@ -20,15 +20,15 @@ Aplicacion de Gestion de Clientes y Ventas con MySQL que centraliza clientes, pr
 3) Solo lectura: acceso a reportes y busquedas.
 
 4) Vistas principales (nombre -> breve descripcion)
-- Dashboard -> KPIs: ventas por periodo, cobranzas, deuda total, aging, top productos/clientes.
+- Dashboard -> KPIs: ventas por periodo, cobranzas, deuda total, aging, top productos/clientes, alertas de sincronizacion offline y recordatorios programados.
 - Clientes -> lista, filtros, detalle, saldo, pedidos y pagos del cliente.
 - Productos -> catalogo, stock opcional, detalle, alta/edicion.
-- Pedidos -> lista con filtros por estado/fecha/cliente, creacion/edicion con alta rapida de producto.
+- Pedidos -> lista con filtros por estado/fecha/cliente, creacion/edicion con alta rapida de producto, gestion de pedidos offline con borradores locales y cola de sincronizacion.
 - Pagos -> registro de pagos (totales o parciales), metodos (transferencia, efectivo, etc.), conciliacion.
 - Cuentas por cobrar -> deuda por cliente/pedido, aging, promesas de pago.
 - Envios -> estado logistico, tracking opcional.
 - Reportes/Analitica -> comparativos por periodo, cliente, producto; margenes basicos.
-- Ajustes -> catalogos, parametros (impuestos/moneda base), usuarios y roles.
+- Ajustes -> catalogos, parametros (impuestos/moneda base), usuarios y roles, configuracion de UI (logo, nombre, modos de sidebar, hover sticky) y parametros de sincronizacion offline.
 - Auditoria -> cambios por entidad y usuario.
 - Import/Export -> CSV de clientes/productos/pedidos (con validaciones).
 
@@ -53,7 +53,7 @@ Aplicacion de Gestion de Clientes y Ventas con MySQL que centraliza clientes, pr
   - Permitir pagos parciales multiples por pedido.
   - Un pedido puede estar entregado y impago/adeudado.
   - due_date opcional; si vence y saldo > 0 => OVERDUE.
-- Acciones: crear/editar, cambiar estado, anadir/remover items, duplicar pedido, cancelar (con motivo).
+- Acciones: crear/editar, cambiar estado, anadir/remover items, duplicar pedido, cancelar (con motivo), verificar vencimiento via API y exportar CSV del historial.
 - Criterio: al confirmar un pedido con deuda pendiente, debe figurar en CxC.
 
 5.4 Pagos
@@ -67,12 +67,13 @@ Aplicacion de Gestion de Clientes y Ventas con MySQL que centraliza clientes, pr
 5.5 Cuentas por cobrar
 - Listado por cliente y por pedido, con saldos y aging.
 - Filtros: por periodo, por monto, por dias de atraso, por vendedor (si aplica).
-- Exportar CSV.
+- Exportar CSV via GET /api/v1/accounts-receivable/export con filtros equivalentes al listado.
 - Criterio: la suma de saldos de todos los pedidos = deuda total del dashboard.
 
 5.6 Envios (logistica)
 - Campos basicos: carrier (op.), tracking (op.), fecha_envio (op.), fecha_entrega (op.).
 - Cambio de estado logistico con historial.
+- Gestion via GET /api/v1/shipments, GET /api/v1/shipments/{id}, PATCH /api/v1/shipments/{id}/tracking y POST /api/v1/shipments/{id}/status.
 - Criterio: al marcar como DELIVERED, registrar fecha_entrega automaticamente si no esta.
 
 5.7 Busquedas y filtros
@@ -81,7 +82,7 @@ Aplicacion de Gestion de Clientes y Ventas con MySQL que centraliza clientes, pr
 - Criterio: buscar "Perez 2025-08" devuelve pedidos del cliente en ese mes.
 
 5.8 Dashboard y analitica
-- KPIs: ventas del periodo, ganado (ingresos cobrados), deuda total y por aging, top clientes/productos, tasa de entrega vs. confirmacion.
+- KPIs (via GET /api/v1/analytics): ventas del periodo, ganado (ingresos cobrados), deuda total y por aging, top clientes/productos, tasa de entrega vs. confirmacion.
 - Graficos (barras/lineas): ventas por mes, cobranzas por mes, deuda por aging.
 - Criterio: cambiar el selector de periodo (ej. ultimos 90 dias) actualiza los KPIs en <2 s.
 
@@ -92,7 +93,7 @@ Aplicacion de Gestion de Clientes y Ventas con MySQL que centraliza clientes, pr
 - Criterio: al cancelar el modal, no pierde los datos ya cargados del pedido.
 
 5.10 Import/Export
-- Import CSV de clientes y productos (plantillas descargables). Validaciones con previsualizacion y reporte de errores.
+- Import CSV de clientes y productos (plantillas descargables) via POST /api/v1/{entidad}/import?mode=preview|commit. Validaciones con previsualizacion y reporte de errores.
 - Export CSV de pedidos, pagos, CxC.
 - Criterio: los IDs externos opcionales se respetan si no colisionan.
 
@@ -202,33 +203,69 @@ CREATE TABLE payments (
   CONSTRAINT fk_payments_order FOREIGN KEY (order_id) REFERENCES orders(id)
 ) ENGINE=InnoDB;
 
-8) API REST v1 (propuesta)
-- Auth
-  POST /api/v1/auth/login -> token; POST /api/v1/auth/logout
-- Clientes
-  GET /customers?query=&page=&size=
-  POST /customers | GET /customers/{id} | PUT /customers/{id} | DELETE /customers/{id}
-- Productos
-  GET /products?query=&active=
-  POST /products (usado por alta rapida) | GET /products/{id} | PUT /products/{id} | DELETE /products/{id}
-- Pedidos
-  GET /orders?customerId=&statusPayment=&statusLogistic=&from=&to=
-  POST /orders (crea cabecera + items)
-  GET /orders/{id} | PUT /orders/{id}
-  POST /orders/{id}/items | PUT /orders/{id}/items/{itemId} | DELETE /orders/{id}/items/{itemId}
-  POST /orders/{id}/confirm | POST /orders/{id}/cancel | POST /orders/{id}/status-logistic
-- Pagos
-  GET /orders/{id}/payments | POST /orders/{id}/payments
-  DELETE /payments/{paymentId} (reversa con auditoria)
-- CxC / Reportes
-  GET /reports/receivables?aging=true&from=&to=&customerId=
-  GET /reports/kpis?period=
-  GET /reports/top-products?period= | GET /reports/top-customers?period=
-- Import/Export
-  POST /import/products (CSV) | POST /import/customers (CSV)
-  GET /export/orders?from=&to= (CSV)
+8) API REST v1 (propuesta actualizada)
+| Dominio | Metodo y ruta | Parametros/Body clave | Notas (formato/respuesta) |
+| --- | --- | --- | --- |
+| Auth | POST /api/v1/auth/login | body { email, password } | Devuelve tokens de acceso/refresh, auditoria de IP. |
+| Auth | POST /api/v1/auth/logout | header Authorization | Invalida refresh token activo. |
+| Clientes | GET /api/v1/customers | query, page, size, sort, status | Lista paginada con busqueda parcial por nombre/email/telefono. |
+| Clientes | POST /api/v1/customers | body { name*, email?, phone?, ... } | Alta con validaciones de campos obligatorios. |
+| Clientes | GET /api/v1/customers/{id} | path id | Devuelve detalle + saldo corriente. |
+| Clientes | PUT /api/v1/customers/{id} | path id, body parcial | Actualiza datos y dispara auditoria. |
+| Clientes | DELETE /api/v1/customers/{id} | path id | Baja logica, responde estado final. |
+| Clientes | GET /api/v1/customers/{id}/financial-summary | path id, query from, to | Resumen financiero (pedidos, pagos, saldo). |
+| Clientes | GET /api/v1/customers/export | query (mismos filtros) | Export CSV (Content-Type text/csv) con columnas configurables. |
+| Clientes | POST /api/v1/customers/import?mode=preview|commit | query mode, file CSV multipart | `preview` valida y devuelve errores sin persistir; `commit` crea/actualiza registros y responde totales. |
+| Productos | GET /api/v1/products | query, active, page, size, sort | Catalogo paginado con filtros por estado y categoria. |
+| Productos | POST /api/v1/products | body { name*, sku?, price*, ... } | Alta/edicion utilizada tambien por flujo de pedido. |
+| Productos | GET /api/v1/products/{id} | path id | Detalle incluyendo datos de inventario basicos. |
+| Productos | PUT /api/v1/products/{id} | path id, body parcial | Actualiza y registra cambios de precio. |
+| Productos | DELETE /api/v1/products/{id} | path id | Baja logica. |
+| Productos | GET /api/v1/products/{id}/price-history | path id, query from, to | Historial de precios de venta y costo. |
+| Productos | POST /api/v1/products/{id}/price-history | path id, body { date, price, source } | Inserta registro historico manual. |
+| Productos | GET /api/v1/products/export | query (mismos filtros) | Export CSV del catalogo. |
+| Productos | POST /api/v1/products/import?mode=preview|commit | query mode, file CSV | Importacion con validaciones por SKU. |
+| Pedidos | GET /api/v1/orders | customerId, statusPayment, statusLogistic, from, to, page, size, sort | Lista paginada con filtros combinados. |
+| Pedidos | POST /api/v1/orders | body { header, items[] } | Crea cabecera + items atomico. |
+| Pedidos | GET /api/v1/orders/{id} | path id | Detalle completo con items, pagos, envios. |
+| Pedidos | PUT /api/v1/orders/{id} | path id, body parcial | Actualiza cabecera y totales recalculados. |
+| Pedidos | POST /api/v1/orders/{id}/items | path id, body item | Agrega item, recalcula totales. |
+| Pedidos | PUT /api/v1/orders/{id}/items/{itemId} | path id + itemId | Modifica item. |
+| Pedidos | DELETE /api/v1/orders/{id}/items/{itemId} | path id + itemId | Elimina item con recalculo. |
+| Pedidos | POST /api/v1/orders/{id}/confirm | path id | Cambia estado a CONFIRMED y sella precios. |
+| Pedidos | POST /api/v1/orders/{id}/cancel | path id, body { reason } | Cancela y registra motivo. |
+| Pedidos | POST /api/v1/orders/{id}/status-logistic | path id, body { status, timestamp? } | Avanza estado logistico desde la orden. |
+| Pedidos | POST /api/v1/orders/{id}/duplicate | path id | Genera borrador copiando cabecera e items. |
+| Pedidos | POST /api/v1/orders/{id}/verify-due-date | path id | Recalcula estado de pago (OVERDUE) segun due_date vigente. |
+| Pedidos | GET /api/v1/orders/export | query from, to, statusPayment, statusLogistic, format=csv | Exporta pedidos y items en CSV. |
+| Pagos | GET /api/v1/payments | orderId?, customerId?, from?, to?, page, size | Lista consolidada de pagos. |
+| Pagos | POST /api/v1/orders/{id}/payments | path id, body { date, amount, method, reference? } | Registra pago y actualiza saldo del pedido. |
+| Pagos | DELETE /api/v1/payments/{paymentId} | path paymentId | Reversa un pago (auditoria obligatoria). |
+| Pagos | GET /api/v1/payments/export | query from, to, customerId?, orderId?, format=csv | Export CSV de pagos registrados. |
+| Cuentas por cobrar | GET /api/v1/accounts-receivable | customerId?, sellerId?, aging=true?, from?, to?, page, size | Reporte de saldos con aging y totales. |
+| Cuentas por cobrar | GET /api/v1/accounts-receivable/export | mismos filtros, format=csv | Exporta listado y aging en CSV. |
+| Analitica | GET /api/v1/analytics | period=preset|custom, from?, to? | KPIs y graficos para dashboard. |
+| Analitica | GET /api/v1/analytics/export | period, metric?, format=csv | Exporta dataset agregado para BI. |
+| Reportes perdidas | GET /api/v1/reports/lost-sales | productId?, customerId?, reason?, from?, to?, page, size | Perdidas por falta de stock u otras causas. |
+| Reportes perdidas | GET /api/v1/reports/lost-sales/export | mismos filtros, format=csv | Export CSV de perdidas con monto potencial. |
+| Perdidas operativas | GET /api/v1/lost-orders | productId?, customerId?, reason?, from?, to?, page, size | Gestion de pedidos perdidos para convertir o analizar. |
+| Perdidas operativas | POST /api/v1/lost-orders | body { date, customerId?, productId, qty, expectedUnitPrice, reason, notes? } | Crea registro de perdida y lo vincula a reportes. |
+| Perdidas operativas | POST /api/v1/lost-orders/{id}/convert-to-order | path id | Convierte la perdida en pedido (opcional). |
+| Reportes | GET /api/v1/reports/top-products | period, limit? | Ranking de productos (usa cache analitica). |
+| Reportes | GET /api/v1/reports/top-customers | period, limit? | Ranking de clientes. |
+| Envíos | GET /api/v1/shipments | status?, from?, to?, orderId?, page, size | Listado de envios asociados a pedidos. |
+| Envíos | GET /api/v1/shipments/{id} | path id | Detalle con historial de estados. |
+| Envíos | PATCH /api/v1/shipments/{id}/tracking | path id, body { trackingNumber, carrier? } | Actualiza datos de seguimiento. |
+| Envíos | POST /api/v1/shipments/{id}/status | path id, body { status, timestamp? } | Registra cambio de estado logistico. |
+| Inventario | GET /api/v1/inventory/movements | productId?, type?, from?, to?, page, size | Movimientos de stock (IN, OUT, ADJUST). |
+| Inventario | POST /api/v1/inventory/movements | body { productId, type, qty, unitCost?, reference?, notes? } | Registra entrada/ajuste y recalcula niveles. |
+| Inventario | GET /api/v1/inventory/levels | productId?, category? | Niveles actuales por producto (on_hand). |
+| Inventario | GET /api/v1/inventory/levels/export | mismos filtros, format=csv | Export CSV de niveles de stock. |
+| Integracion UI | GET /api/v1/settings/ui | - | Devuelve configuracion de branding y sidebar. |
+| Integracion UI | PUT /api/v1/settings/ui | body { sidebarMode, sidebarCollapsed, hoverSticky?, brandName, brandLogoUrl } | Actualiza preferencias de interfaz con validaciones. |
+| Configuracion | GET /api/v1/settings/database | - | Retorna parametros de conexion (segun disponibilidad). |
 
-Contrato de respuesta comun: {"data": ..., "meta": {...}, "errors": [...]}
+Contrato de respuesta comun: {"data": ..., "meta": { page, size, total }, "errors": [...]}.
 Versionado: prefijo /api/v1/ y documentacion OpenAPI/Swagger incluida.
 
 9) Requerimientos no funcionales
@@ -309,10 +346,14 @@ Frontend (React + TS, ejemplo)
   - Dado que un pedido esta con due_date pasado y saldo > 0, cuando cargo la vista de CxC, entonces el pedido aparece en OVERDUE y en el aging correcto.
 - Pagos parciales
   - Dado un pedido de 1000, cuando registro un pago de 300, entonces el estado pasa a PARTIALLY_PAID, el saldo queda en 700 y el dashboard refleja el cobro del periodo.
+- Seguimiento de envios
+  - Dado un envio en estado IN_TRANSIT, cuando actualizo el tracking via PATCH /api/v1/shipments/{id}/tracking, entonces el detalle del envio muestra el nuevo codigo y el historial registra la fecha de actualizacion.
+- Importacion con modo preview/commit
+  - Dado un archivo CSV valido, cuando llamo a POST /api/v1/customers/import?mode=preview, la API devuelve los registros validados sin persistirlos y al repetir la llamada con mode=commit se crean los clientes y la respuesta indica totales importados/omitidos.
 
 12) Analitica (metricas y vistas)
 - KPI: Ventas (Sum grand_total confirmados), Cobros (Sum amount), Deuda (Sum balance_total), Ticket promedio, Top N productos/clientes, % entregas en tiempo, DSO (Days Sales Outstanding).
-- Reportes: por rango de fechas, por cliente, por producto; exportables.
+- Reportes: por rango de fechas, por cliente, por producto (incluye perdidas via GET /api/v1/reports/lost-sales y export CSV con GET /api/v1/reports/lost-sales/export).
 - Trazabilidad: drill-down desde KPI -> lista -> detalle.
 
 13) Privacidad y cumplimiento (AR)
@@ -360,6 +401,7 @@ C) Consideraciones de UI/Estilo
 - Reglas:
   - No impacta inventario ni ventas reales; se usa para analitica y proyecciones.
   - Permite convertir posteriormente un registro perdido en pedido real si se repone stock (con enlace).
+  - API: gestion directa via GET/POST /api/v1/lost-orders y analitica consolidada via GET /api/v1/reports/lost-sales (+ /export).
 - Analitica:
   - Proyeccion de ingresos perdidos por periodo (semanal, mensual, trimestral) = Sum (cantidad * precio esperado).
   - Ranking de productos y clientes mas afectados.
@@ -375,6 +417,7 @@ C) Consideraciones de UI/Estilo
   - Para cada ingreso: fecha, proveedor (op.), cantidad, costo unitario de compra, moneda (op.), notas.
   - Visualizar existencias actuales por producto y valuacion de inventario (promedio ponderado o FIFO, configurable).
   - Historial de costos de compra y precio de venta para comparativa y calculo de margen por periodo.
+  - API: GET/POST /api/v1/inventory/movements, GET /api/v1/inventory/levels y GET /api/v1/products/{id}/price-history.
 - Analitica:
   - Evolucion del costo de compra vs. precio de venta sugerido/real.
   - Margen bruto promedio por producto y por categoria en el tiempo.
@@ -389,18 +432,14 @@ C) Consideraciones de UI/Estilo
 - Tabla product_price_history (opcional): id, product_id(FK), date, price DECIMAL(12,2), source ('manual','rule'), notes.
 - Indices sugeridos: inventory_movements(product_id, created_at), lost_orders(product_id, date), product_price_history(product_id, date).
 
-17) Endpoints REST adicionales
-- Inventario
-  - GET /inventory/movements?productId=&from=&to=
-  - POST /inventory/movements (registrar entradas/ajustes)
-  - GET /inventory/levels?productId=
-- Perdidas por falta de stock
-  - GET /lost-orders?productId=&customerId=&from=&to=
-  - POST /lost-orders
-  - POST /lost-orders/{id}/convert-to-order (opcional, crea un pedido a partir del registro)
-- Historial de precios
-  - GET /products/{id}/price-history?from=&to=
-  - POST /products/{id}/price-history
+17) Parametros y formatos clave de la API
+- **Paginacion y ordenamiento**: todos los listados usan `page` (>=1), `size` (<=100 por defecto) y `sort=campo,ASC|DESC`. La respuesta incluye `meta.page`, `meta.size`, `meta.total` y `meta.totalPages`.
+- **Filtros funcionales**: `from`/`to` (ISO-8601) para rangos de fechas; `statusPayment`, `statusLogistic`, `sellerId`, `reason` y `aging=true|false` segun el dominio; `query` aplica busqueda parcial insensible a mayusculas.
+- **Exportaciones CSV**: endpoints `/export` retornan `text/csv` con separador `,`, encabezados en la primera fila y soporte de `format=csv` (futuro `format=xlsx`). En pedidos y CxC se permiten filtros identicos al listado.
+- **Importaciones CSV**: `/import?mode=preview|commit` reciben archivos `multipart/form-data`. `preview` devuelve `data.rows` con estado `valid|invalid` y `errors` detallados; `commit` persiste y devuelve resumen `{ inserted, updated, skipped }`.
+- **Analitica y reportes**: `period` acepta valores `today|yesterday|last_7|last_30|custom`; con `custom` se exige `from` y `to`. `metric` permite solicitar subconjuntos (ej. `sales`, `receivables`, `lostSales`).
+- **Envios**: cambios de estado requieren cuerpo `{ status, timestamp? }`; actualizaciones de tracking permiten `{ trackingNumber, carrier, url? }` y registran historial.
+- **Operaciones especiales**: `/orders/{id}/verify-due-date` recalcula `status_payment`; `/lost-orders/{id}/convert-to-order` queda disponible como extension opcional reutilizando el flujo de pedidos.
 
 18) Analitica extendida
 - KPIs adicionales: ingresos potenciales perdidos, tasa de stockouts, top productos con perdidas, margen bruto promedio por periodo.
@@ -409,3 +448,24 @@ C) Consideraciones de UI/Estilo
 19) Criterios de aceptacion adicionales
 - Pedidos perdidos: dado un producto sin stock, cuando se registra una perdida por 5 unidades y precio esperado 100, entonces la proyeccion de perdidas del mes aumenta en 500 y el producto aparece en el top de perdidas si corresponde.
 - Gestion de stock: dado un ingreso de 50 unidades a costo 80, el stock on_hand aumenta en 50 y el costo promedio del producto se recalcula segun el metodo configurado (PP o FIFO).
+
+20) Personalizacion y operacion offline
+- Preferencias de UI (GET/PUT /settings/ui)
+  - El endpoint expone/acepta `sidebarMode` (left|floating), `sidebarCollapsed` (boolean), `hoverSticky` (boolean), `brandName` y `brandLogoUrl`.
+  - Validaciones: `brandName` no puede ser vacio ni solo espacios; `brandLogoUrl` debe ser URL valida (http/https); `sidebarMode` debe pertenecer al conjunto permitido; `hoverSticky` solo se admite en modo floating; solicitudes invalidas retornan 422 con detalle por campo.
+  - PUT /settings/ui persiste en cache/calor (base de datos/configuracion) y responde con el estado final normalizado; GET devuelve siempre los valores efectivos vigentes.
+- Parametros de base de datos (GET /settings/database)
+  - La API provee credenciales, host, puerto y nombre de base leidos desde `config/database.json`; si falta el archivo, GET retorna 503 y registra alerta.
+  - El archivo debe cumplir esquema `{ "host": string, "port": number, "username": string, "password": string, "schema": string }` y se valida al arrancar la aplicacion.
+- Puente `window.sistemaFloreria`
+  - Objeto global inyectado por la shell electron/webview para permitir `window.sistemaFloreria.updateBranding({ name, logoUrl })` y `window.sistemaFloreria.notify({ type, title, body, scheduleAt? })`.
+  - Debe ser resiliente a ausencia del puente (la UI valida antes de invocar) y registra metricas de exito/error.
+- Flujo de pedidos offline
+  - Cada pedido se guarda como borrador local (IndexedDB/localStorage) con versionado y marca de tiempo; la UI permite continuar en linea u offline.
+  - Cuando no hay conexion, las operaciones generan eventos en una cola de sincronizacion que se reintenta automaticamente con backoff exponencial al recuperar conectividad.
+  - Las notificaciones se disparan inmediatamente si el puente esta disponible; si no, se programan y se envian cuando se procesa la cola (`scheduleAt`).
+  - Condicion para volver en linea: al detectar `navigator.onLine = true` y confirmarse la disponibilidad de la API (salud 200), se ejecuta sincronizacion completa (pedidos pendientes, recordatorios) y se limpia la cola confirmada.
+- Criterios de aceptacion
+  - Dado que un usuario actualiza el nombre de marca con cadena vacia, PUT /settings/ui responde 422 indicando `brandName` obligatorio y no persiste cambios.
+  - Dado un pedido creado offline, cuando la conexion vuelve y la API responde 200, entonces el pedido se sincroniza automaticamente y se marca como "Enviado" en la cola sin intervencion manual.
+  - Dado un recordatorio de entrega programado offline, cuando se confirma la sincronizacion, el sistema envia notificacion mediante `window.sistemaFloreria.notify` y registra confirmacion en el dashboard de recordatorios.
