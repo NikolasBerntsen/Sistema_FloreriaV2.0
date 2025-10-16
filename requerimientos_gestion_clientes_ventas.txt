@@ -1,0 +1,411 @@
+
+Resumen ejecutivo
+Aplicacion de Gestion de Clientes y Ventas con MySQL que centraliza clientes, productos, pedidos, pagos y envios. Incluye dashboard de indicadores, busqueda avanzada por cliente y periodo, cuentas por cobrar (con estado de deuda, pagos parciales y vencimientos), creacion de pedidos con alta rapida de productos en el flujo, navegacion fluida (atras/adelante/inicio) y una arquitectura modular lista para escalar. Se especifican requerimientos funcionales, no funcionales y tecnicos, un modelo de datos propuesto (MySQL), endpoints REST v1 y criterios de aceptacion base.
+
+1) Objetivo y alcance
+- Objetivo: construir un sistema modular para registrar y consultar clientes, productos, pedidos (con items), pagos y estados de envio, con analitica de negocio.
+- Alcance inicial (MVP+):
+  Clientes, Productos, Pedidos, Items de pedido, Pagos (incl. parciales), Estados de pedido/envio, Cuentas por cobrar, Dashboard/Analitica, Busquedas y filtros, Import/Export CSV, Gestion basica de usuarios/roles, Auditoria.
+- Fuera de alcance (version inicial): facturacion electronica, pasarelas de pago, multimoneda y multi-sucursal (se dejan previstas en el diseno).
+
+2) Glosario
+- Pedido: orden de compra asociada a un cliente; tiene items, totales, estados y vencimiento.
+- Estado de pago: UNPAID, PARTIALLY_PAID, PAID, OVERDUE.
+- Estado logistico: DRAFT, CONFIRMED, IN_PREPARATION, IN_TRANSIT, DELIVERED, CANCELLED, RETURNED.
+- Cuentas por cobrar (CxC): saldos pendientes por cliente y por pedido, con aging (030, 3160, 6190, >90 dias).
+
+3) Roles de usuario (base)
+1) Admin: CRUD completo, configuracion, usuarios/roles, auditoria.
+2) Vendedor: CRUD de clientes/productos/pedidos/pagos (segun permisos), consulta de analitica.
+3) Solo lectura: acceso a reportes y busquedas.
+
+4) Vistas principales (nombre -> breve descripcion)
+- Dashboard -> KPIs: ventas por periodo, cobranzas, deuda total, aging, top productos/clientes.
+- Clientes -> lista, filtros, detalle, saldo, pedidos y pagos del cliente.
+- Productos -> catalogo, stock opcional, detalle, alta/edicion.
+- Pedidos -> lista con filtros por estado/fecha/cliente, creacion/edicion con alta rapida de producto.
+- Pagos -> registro de pagos (totales o parciales), metodos (transferencia, efectivo, etc.), conciliacion.
+- Cuentas por cobrar -> deuda por cliente/pedido, aging, promesas de pago.
+- Envios -> estado logistico, tracking opcional.
+- Reportes/Analitica -> comparativos por periodo, cliente, producto; margenes basicos.
+- Ajustes -> catalogos, parametros (impuestos/moneda base), usuarios y roles.
+- Auditoria -> cambios por entidad y usuario.
+- Import/Export -> CSV de clientes/productos/pedidos (con validaciones).
+
+5) Requerimientos funcionales (detalle por modulo)
+5.1 Clientes
+- Campos: nombre*, email (opcional), telefono (op.), direccion (op.), alias_pago (op.), notas (op.).
+- Validaciones minimas: nombre no vacio; email formato si provisto; telefono formato si provisto.
+- Acciones: alta/edicion/baja logica, busqueda (por nombre/email/tel), ver saldo actual, ver historial de pedidos y pagos.
+- Criterio aceptacion: al guardar un cliente con solo nombre, debe persistir; busqueda por "Juan" debe traer coincidencias parciales.
+
+5.2 Productos
+- Campos: nombre*, sku (op., unico si existe), precio_unitario*, descripcion (op.), categoria (op.), activo (bool).
+- Acciones: alta/edicion/baja logica, busqueda por nombre/SKU, alta rapida desde Pedido y reflejo inmediato en catalogo.
+- Criterio: crear producto "X" en el flujo de pedido lo deja disponible para seleccionar sin recargar.
+
+5.3 Pedidos
+- Estructura: cabecera + items (producto, cantidad, precio_unitario, descuento op., impuesto op.).
+- Estados de pedido (logisticos): DRAFT -> CONFIRMED -> IN_PREPARATION -> IN_TRANSIT -> DELIVERED / CANCELLED / RETURNED.
+- Estados de pago: UNPAID, PARTIALLY_PAID, PAID, OVERDUE (por due_date).
+- Reglas:
+  - Totales calculados (= Sum items con descuentos/impuestos).
+  - Permitir pagos parciales multiples por pedido.
+  - Un pedido puede estar entregado y impago/adeudado.
+  - due_date opcional; si vence y saldo > 0 => OVERDUE.
+- Acciones: crear/editar, cambiar estado, anadir/remover items, duplicar pedido, cancelar (con motivo).
+- Criterio: al confirmar un pedido con deuda pendiente, debe figurar en CxC.
+
+5.4 Pagos
+- Campos: pedido_id*, fecha, monto, metodo (efectivo/transferencia/otro), referencia (op.), notas (op.).
+- Reglas:
+  - Sumar al total pagado del pedido, recalcular saldo y estado de pago.
+  - Permitir mas de un pago por pedido.
+  - Validar que monto > 0 y <= saldo (o permitir sobrepago y lo deja en credito del cliente, configurable).
+- Criterio: registrar un pago parcial actualiza saldo y mueve estado a PARTIALLY_PAID.
+
+5.5 Cuentas por cobrar
+- Listado por cliente y por pedido, con saldos y aging.
+- Filtros: por periodo, por monto, por dias de atraso, por vendedor (si aplica).
+- Exportar CSV.
+- Criterio: la suma de saldos de todos los pedidos = deuda total del dashboard.
+
+5.6 Envios (logistica)
+- Campos basicos: carrier (op.), tracking (op.), fecha_envio (op.), fecha_entrega (op.).
+- Cambio de estado logistico con historial.
+- Criterio: al marcar como DELIVERED, registrar fecha_entrega automaticamente si no esta.
+
+5.7 Busquedas y filtros
+- Busqueda global (cliente, pedido, producto por texto).
+- Filtros en listas por estado, rango de fechas, cliente y metodo de pago.
+- Criterio: buscar "Perez 2025-08" devuelve pedidos del cliente en ese mes.
+
+5.8 Dashboard y analitica
+- KPIs: ventas del periodo, ganado (ingresos cobrados), deuda total y por aging, top clientes/productos, tasa de entrega vs. confirmacion.
+- Graficos (barras/lineas): ventas por mes, cobranzas por mes, deuda por aging.
+- Criterio: cambiar el selector de periodo (ej. ultimos 90 dias) actualiza los KPIs en <2 s.
+
+5.9 Navegacion y UX
+- Botones: Atras, Adelante, Inicio; breadcrumbs y menu lateral.
+- Alta rapida: en "Nuevo pedido", boton "+ Nuevo producto" modal inline.
+- Guardado automatico (draft) opcional.
+- Criterio: al cancelar el modal, no pierde los datos ya cargados del pedido.
+
+5.10 Import/Export
+- Import CSV de clientes y productos (plantillas descargables). Validaciones con previsualizacion y reporte de errores.
+- Export CSV de pedidos, pagos, CxC.
+- Criterio: los IDs externos opcionales se respetan si no colisionan.
+
+5.11 Notificaciones (opcional)
+- Recordatorios de vencimiento (email) y confirmaciones de pago.
+- Criterio: activar/desactivar por cliente o global.
+
+5.12 Seguridad y usuarios
+- Inicio de sesion, recuperacion de contrasena, RBAC por rol.
+- Auditoria: quien, que, cuando (antes/despues).
+- Criterio: cambios criticos (precios, borrar pedido) quedan trazados.
+
+5.13 Configuracion
+- Parametros: moneda base, impuestos por defecto, politicas de sobrepago, longitud de periodo del dashboard, etc.
+- Catalogos (categorias de producto, metodos de pago).
+
+6) Reglas de negocio clave
+- Un pedido puede estar entregado y seguir impago; CxC lo debe mostrar.
+- Pagos parciales permitidos e ilimitados.
+- Overdue = hoy > due_date y saldo > 0.
+- Alta rapida de producto no puede romper el flujo del pedido.
+- Bajas son logicas (no se pierden datos historicos).
+- Precios en items son congelados en el momento del pedido (si cambia el catalogo, no afecta pedidos historicos).
+
+7) Modelo de datos (MySQL, propuesta)
+Tablas (nombre -> campos principales)
+1) customers -> id, name*, email, phone, address, payment_alias, notes, active, created_at, updated_at.
+2) products -> id, name*, sku(UNIQUE, NULLABLE), unit_price(DECIMAL 12,2), description, category, active, timestamps.
+3) orders -> id, customer_id(FK), order_date, due_date(NULLABLE), status_logistic(ENUM), status_payment(ENUM), currency(op.), subtotal, discount_total, tax_total, grand_total, paid_total, balance_total, timestamps.
+4) order_items -> id, order_id(FK), product_id(FK, NULLABLE si fue borrado), name_snapshot, unit_price_snapshot, quantity, discount(op.), tax(op.), line_total.
+5) payments -> id, order_id(FK), date, amount, method(ENUM), reference, notes, timestamps.
+6) shipments (opcional) -> id, order_id(FK), carrier, tracking, shipped_at, delivered_at.
+7) users -> id, email(UNIQUE), password_hash, role(ENUM: ADMIN, SELLER, READONLY), active, timestamps.
+8) audit_log -> id, entity, entity_id, action, actor_user_id, before_json, after_json, created_at.
+
+Indices sugeridos
+- orders(customer_id, order_date), orders(status_payment, due_date), payments(order_id, date), order_items(order_id), customers(name), products(name, sku).
+
+DDL de ejemplo (extracto)
+CREATE TABLE customers (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  name VARCHAR(160) NOT NULL,
+  email VARCHAR(160),
+  phone VARCHAR(60),
+  address VARCHAR(240),
+  payment_alias VARCHAR(120),
+  notes TEXT,
+  active TINYINT(1) DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE products (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  name VARCHAR(160) NOT NULL,
+  sku VARCHAR(80) UNIQUE,
+  unit_price DECIMAL(12,2) NOT NULL,
+  description TEXT,
+  category VARCHAR(120),
+  active TINYINT(1) DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE orders (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  customer_id BIGINT NOT NULL,
+  order_date DATE NOT NULL,
+  due_date DATE NULL,
+  status_logistic ENUM('DRAFT','CONFIRMED','IN_PREPARATION','IN_TRANSIT','DELIVERED','CANCELLED','RETURNED') NOT NULL DEFAULT 'DRAFT',
+  status_payment ENUM('UNPAID','PARTIALLY_PAID','PAID','OVERDUE') NOT NULL DEFAULT 'UNPAID',
+  currency CHAR(3) DEFAULT 'ARS',
+  subtotal DECIMAL(12,2) NOT NULL DEFAULT 0,
+  discount_total DECIMAL(12,2) NOT NULL DEFAULT 0,
+  tax_total DECIMAL(12,2) NOT NULL DEFAULT 0,
+  grand_total DECIMAL(12,2) NOT NULL DEFAULT 0,
+  paid_total DECIMAL(12,2) NOT NULL DEFAULT 0,
+  balance_total DECIMAL(12,2) NOT NULL DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_orders_customer FOREIGN KEY (customer_id) REFERENCES customers(id)
+) ENGINE=InnoDB;
+
+CREATE TABLE order_items (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  order_id BIGINT NOT NULL,
+  product_id BIGINT,
+  name_snapshot VARCHAR(160) NOT NULL,
+  unit_price_snapshot DECIMAL(12,2) NOT NULL,
+  quantity DECIMAL(12,3) NOT NULL,
+  discount DECIMAL(12,2) DEFAULT 0,
+  tax DECIMAL(12,2) DEFAULT 0,
+  line_total DECIMAL(12,2) NOT NULL,
+  CONSTRAINT fk_items_order FOREIGN KEY (order_id) REFERENCES orders(id),
+  CONSTRAINT fk_items_product FOREIGN KEY (product_id) REFERENCES products(id)
+) ENGINE=InnoDB;
+
+CREATE TABLE payments (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  order_id BIGINT NOT NULL,
+  date DATE NOT NULL,
+  amount DECIMAL(12,2) NOT NULL,
+  method ENUM('CASH','TRANSFER','OTHER') NOT NULL,
+  reference VARCHAR(160),
+  notes VARCHAR(240),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_payments_order FOREIGN KEY (order_id) REFERENCES orders(id)
+) ENGINE=InnoDB;
+
+8) API REST v1 (propuesta)
+- Auth
+  POST /api/v1/auth/login -> token; POST /api/v1/auth/logout
+- Clientes
+  GET /customers?query=&page=&size=
+  POST /customers | GET /customers/{id} | PUT /customers/{id} | DELETE /customers/{id}
+- Productos
+  GET /products?query=&active=
+  POST /products (usado por alta rapida) | GET /products/{id} | PUT /products/{id} | DELETE /products/{id}
+- Pedidos
+  GET /orders?customerId=&statusPayment=&statusLogistic=&from=&to=
+  POST /orders (crea cabecera + items)
+  GET /orders/{id} | PUT /orders/{id}
+  POST /orders/{id}/items | PUT /orders/{id}/items/{itemId} | DELETE /orders/{id}/items/{itemId}
+  POST /orders/{id}/confirm | POST /orders/{id}/cancel | POST /orders/{id}/status-logistic
+- Pagos
+  GET /orders/{id}/payments | POST /orders/{id}/payments
+  DELETE /payments/{paymentId} (reversa con auditoria)
+- CxC / Reportes
+  GET /reports/receivables?aging=true&from=&to=&customerId=
+  GET /reports/kpis?period=
+  GET /reports/top-products?period= | GET /reports/top-customers?period=
+- Import/Export
+  POST /import/products (CSV) | POST /import/customers (CSV)
+  GET /export/orders?from=&to= (CSV)
+
+Contrato de respuesta comun: {"data": ..., "meta": {...}, "errors": [...]}
+Versionado: prefijo /api/v1/ y documentacion OpenAPI/Swagger incluida.
+
+9) Requerimientos no funcionales
+- Usabilidad: interfaz clara, accesible (WCAG 2.2 AA), diseno coherente, navegacion Atras/Adelante/Inicio siempre visible.
+- Rendimiento: listas de 10k filas con filtros server-side; respuestas de API P95 < 400 ms; dashboard en < 2 s con cache.
+- Seguridad:
+  - Autenticacion con hashing fuerte (Argon2/BCrypt), JWT con expiracion corta y refresh.
+  - Autorizacion RBAC; validaciones server-side; sanitizacion inputs; proteccion CSRF/CORS.
+  - PII (nombre, email, telefono, direccion, alias de pago) almacenada con politicas de acceso minimo y cifrado en reposo para campos sensibles si aplica.
+  - Backups diarios + pruebas de restore.
+  - Cumplimiento de Ley 25.326 (AR) de datos personales (consentimiento, finalidad, acceso/correccion, baja).
+- Disponibilidad: 99.5% (on-prem o nube); recuperacion ante fallos RTO <= 4 h, RPO <= 24 h.
+- Escalabilidad: stateless API; pool de conexiones; indices adecuados; cache de lecturas.
+- Mantenibilidad: arquitectura por capas/hexagonal; cobertura de tests >= 70%.
+- Observabilidad: logs estructurados (JSON), metricas (p99 lat, errores), trazas; panel en Grafana/ELK.
+- Internacionalizacion: textos externalizados; formato de fecha/numero configurable.
+- Compatibilidad: navegadores evergreen; responsive desktop/tablet; PWA opcional.
+
+10) Requerimientos tecnicos
+10.1 Arquitectura
+- Backend: API REST, principios Hexagonal/Clean Architecture:
+  - domain/ (entidades, agregados, reglas),
+  - application/ (casos de uso/servicios),
+  - infrastructure/ (ORM/DB, HTTP, seguridad, mensajeria).
+- Frontend: SPA (React + TypeScript) o equivalente (Vue). Router con breadcrumbs y navegacion estandar; estado con Redux/Query o similar; componentes reutilizables (Tabla, Filtro, Modal, Form).
+- DB: MySQL InnoDB, migraciones con Flyway o Liquibase; semilla de datos.
+- Docs: OpenAPI/Swagger UI para la API.
+
+10.2 Organizacion de codigo (ejemplo)
+Backend (Java Spring Boot, ejemplo)
+/src/main/java/com/acme/salescrm
+  /domain
+    /model (Customer, Product, Order, Payment, enums)
+    /repository (interfaces)
+    /services (reglas puras)
+  /application
+    /usecases (CreateOrder, RegisterPayment, ListReceivables, etc.)
+    /dto (requests/responses)
+  /infrastructure
+    /persistence (JPA entities, repositories impl)
+    /web (controllers REST, exception handlers)
+    /config (security, cors, swagger)
+    /mapping (MapStruct)
+  /shared (errors, utils)
+/src/test/java/... (unit/integration)
+
+Frontend (React + TS, ejemplo)
+/src
+  /app (routing, providers)
+  /components (Table, Modal, Form, Breadcrumbs, KPIs)
+  /features
+    /customers (pages, api, hooks, components)
+    /products (...)
+    /orders (...)
+    /payments (...)
+    /reports (...)
+  /styles (variables, tokens)
+  /lib (client http, auth)
+  /store (state)
+
+10.3 Estandares y utilidades
+- Estilo: linters (ESLint/Prettier / Checkstyle), formateo automatizado.
+- Errores: middleware global -> errors:[{code, message, field}].
+- Validaciones: server-side + client-side; mensajes localizados.
+- Paginacion: page, size, sort (field,asc|desc).
+- Caching: KPIs/reportes por periodo; invalidacion en cambios relevantes.
+- Seguridad API: JWT en header; CORS restrictivo; rate-limit basico.
+- CI/CD: pipeline con build, tests, lint, SCA (Dependabot), despliegue a staging y prod.
+- Entornos: .env o Secrets Manager; variables para DB, JWT, CORS, etc.
+- Tests: unitarios (dominio), integracion (repos + controllers), e2e (API y UI).
+- Versionado: SemVer en API; cambios breaking -> /v2.
+- Auditoria: AOP/interceptor para persistir diffs (before/after).
+
+11) Criterios de aceptacion (muestra por vista)
+- Nuevo Pedido
+  - Dado un cliente existente, cuando agrego 2 items y creo un producto nuevo desde el modal, entonces el item puede seleccionarlo inmediatamente y el total se recalcula en tiempo real.
+- CxC
+  - Dado que un pedido esta con due_date pasado y saldo > 0, cuando cargo la vista de CxC, entonces el pedido aparece en OVERDUE y en el aging correcto.
+- Pagos parciales
+  - Dado un pedido de 1000, cuando registro un pago de 300, entonces el estado pasa a PARTIALLY_PAID, el saldo queda en 700 y el dashboard refleja el cobro del periodo.
+
+12) Analitica (metricas y vistas)
+- KPI: Ventas (Sum grand_total confirmados), Cobros (Sum amount), Deuda (Sum balance_total), Ticket promedio, Top N productos/clientes, % entregas en tiempo, DSO (Days Sales Outstanding).
+- Reportes: por rango de fechas, por cliente, por producto; exportables.
+- Trazabilidad: drill-down desde KPI -> lista -> detalle.
+
+13) Privacidad y cumplimiento (AR)
+- Aviso y politica de privacidad; registro de finalidad; derechos de acceso/rectificacion/supresion.
+- Cifrado at-rest para datos sensibles si se almacena informacion de pago (p. ej., alias CBU).
+- Logs de acceso a PII.
+
+14) Roadmap sugerido
+1) MVP: Clientes, Productos, Pedidos+Items, Pagos, CxC basico, Dashboard basico, Busquedas, RBAC, Auditoria.
+2) v1.1: Envios/Tracking, Import/Export, Notificaciones de vencimiento.
+3) v1.2: Integracion pasarela de pagos, multimoneda, costos y margenes avanzados.
+4) v1.3: App movil/Tablet y PWA, roles avanzados, multi-sucursal.
+
+Anexos
+
+A) Reglas de calculo (totales)
+- line_total = (unit_price_snapshot * quantity) - discount + tax
+- subtotal = Sum line_total (sin impuestos si separamos)
+- grand_total = subtotal - discount_total + tax_total
+- paid_total = Sum payments.amount
+- balance_total = grand_total - paid_total
+- Estado de pago:
+  - PAID si balance_total = 0.
+  - PARTIALLY_PAID si 0 < balance_total < grand_total.
+  - UNPAID si balance_total = grand_total.
+  - OVERDUE si due_date < hoy y balance_total > 0.
+
+B) Validaciones clave
+- Cliente con solo nombre permitido; email/telefono opcionales pero con formato valido si existen.
+- Producto debe tener name y unit_price >= 0.
+- Pedido con al menos un item; cantidades > 0.
+- Pago con amount > 0; si excede saldo, comportamiento configurable (credito a favor).
+
+C) Consideraciones de UI/Estilo
+- Tema claro con buen contraste; tipografias legibles; menu lateral + breadcrumbs.
+- Acciones primarias claras (Guardar, Confirmar, Registrar pago) y teclas rapidas (opcional).
+- Estados con chips de color (logisticos y de pago).
+- Paginacion server-side, columnas ordenables, filtros persistentes.
+
+15) Nuevos requerimientos surgidos (stock y perdidas por falta de stock)
+
+15.1 Pantalla de pedidos perdidos por falta de stock
+- Objetivo: registrar oportunidades de venta perdidas por no disponer de stock y estimar el impacto economico.
+- Campos sugeridos: fecha, cliente (opcional), producto, cantidad solicitada, precio de venta esperado al momento, motivo (falta de stock), notas (op.).
+- Reglas:
+  - No impacta inventario ni ventas reales; se usa para analitica y proyecciones.
+  - Permite convertir posteriormente un registro perdido en pedido real si se repone stock (con enlace).
+- Analitica:
+  - Proyeccion de ingresos perdidos por periodo (semanal, mensual, trimestral) = Sum (cantidad * precio esperado).
+  - Ranking de productos y clientes mas afectados.
+  - Tasa de ruptura de stock (stockout rate) por categoria.
+- Criterios de aceptacion:
+  - Al crear un registro de perdida, el dashboard de perdidas lo refleja en menos de 2 s.
+  - Filtros por periodo, producto, cliente; export CSV.
+
+15.2 Pantalla de gestion de stock y costos historicos
+- Objetivo: gestionar entradas de stock, costos de compra y existencias para comparativas historicas de precios.
+- Funcionalidad:
+  - Registrar movimientos de inventario: ingreso, egreso (ajuste), transferencia (si aplica en el futuro).
+  - Para cada ingreso: fecha, proveedor (op.), cantidad, costo unitario de compra, moneda (op.), notas.
+  - Visualizar existencias actuales por producto y valuacion de inventario (promedio ponderado o FIFO, configurable).
+  - Historial de costos de compra y precio de venta para comparativa y calculo de margen por periodo.
+- Analitica:
+  - Evolucion del costo de compra vs. precio de venta sugerido/real.
+  - Margen bruto promedio por producto y por categoria en el tiempo.
+- Criterios de aceptacion:
+  - Al registrar una entrada de stock, la existencia y el costo promedio (si se usa PP) se actualizan inmediatamente.
+  - Reporte historico muestra costos de compra por periodo y permite export CSV.
+
+16) Extension del modelo de datos (sugerida)
+- Tabla inventory_movements: id, product_id(FK), type(ENUM: IN, OUT, ADJUST), qty DECIMAL(12,3), unit_cost DECIMAL(12,2) NULL, reference, notes, created_at.
+- Tabla inventory_levels (opcional, si se materializa): product_id(FK), on_hand DECIMAL(12,3), updated_at.
+- Tabla lost_orders: id, date, customer_id NULL, product_id(FK), qty DECIMAL(12,3), expected_unit_price DECIMAL(12,2), reason DEFAULT 'OUT_OF_STOCK', notes, created_at.
+- Tabla product_price_history (opcional): id, product_id(FK), date, price DECIMAL(12,2), source ('manual','rule'), notes.
+- Indices sugeridos: inventory_movements(product_id, created_at), lost_orders(product_id, date), product_price_history(product_id, date).
+
+17) Endpoints REST adicionales
+- Inventario
+  - GET /inventory/movements?productId=&from=&to=
+  - POST /inventory/movements (registrar entradas/ajustes)
+  - GET /inventory/levels?productId=
+- Perdidas por falta de stock
+  - GET /lost-orders?productId=&customerId=&from=&to=
+  - POST /lost-orders
+  - POST /lost-orders/{id}/convert-to-order (opcional, crea un pedido a partir del registro)
+- Historial de precios
+  - GET /products/{id}/price-history?from=&to=
+  - POST /products/{id}/price-history
+
+18) Analitica extendida
+- KPIs adicionales: ingresos potenciales perdidos, tasa de stockouts, top productos con perdidas, margen bruto promedio por periodo.
+- Graficos: linea de costos de compra vs precio de venta; barras de perdidas por producto/mes.
+
+19) Criterios de aceptacion adicionales
+- Pedidos perdidos: dado un producto sin stock, cuando se registra una perdida por 5 unidades y precio esperado 100, entonces la proyeccion de perdidas del mes aumenta en 500 y el producto aparece en el top de perdidas si corresponde.
+- Gestion de stock: dado un ingreso de 50 unidades a costo 80, el stock on_hand aumenta en 50 y el costo promedio del producto se recalcula segun el metodo configurado (PP o FIFO).
