@@ -55,10 +55,10 @@ class FloreriaApp:
         self._main_window: Optional[MainWindow] = None
         self._home_view: Optional[ViewDefinition] = None
         self._window_logo: Optional[object] = None
-        self._email_var = tk.StringVar(value="") if tk is not None else None
-        self._password_var = tk.StringVar(value="") if tk is not None else None
-        self._status_var = tk.StringVar(value="") if tk is not None else None
-        self._user_info_var = tk.StringVar(value="") if tk is not None else None
+        self._email_var: Optional[tk.StringVar] = None
+        self._password_var: Optional[tk.StringVar] = None
+        self._status_var: Optional[tk.StringVar] = None
+        self._user_info_var: Optional[tk.StringVar] = None
 
     def run(self) -> None:
         if tk is None:
@@ -67,6 +67,7 @@ class FloreriaApp:
             )
 
         self._root = tk.Tk()
+        self._initialize_variables()
         self._root.title(self._branding.name)
         self._root.geometry("960x620")
         self._root.minsize(820, 520)
@@ -89,8 +90,24 @@ class FloreriaApp:
     # ------------------------------------------------------------------
     # Construcción de vistas
     # ------------------------------------------------------------------
-    def _build_login_view(self) -> None:
+    def _initialize_variables(self) -> None:
+        """Inicializa los StringVar de Tk una vez que la raíz está disponible."""
+
         assert tk is not None and self._root is not None
+
+        self._email_var = tk.StringVar(master=self._root, value="")
+        self._password_var = tk.StringVar(master=self._root, value="")
+        self._status_var = tk.StringVar(master=self._root, value="")
+        self._user_info_var = tk.StringVar(master=self._root, value="")
+
+    def _build_login_view(self) -> None:
+        assert (
+            tk is not None
+            and self._root is not None
+            and self._email_var is not None
+            and self._password_var is not None
+            and self._status_var is not None
+        )
 
         self._login_frame = tk.Frame(self._root, padx=40, pady=40, bg=ui_theme.SURFACE_COLOR)
 
@@ -210,6 +227,8 @@ class FloreriaApp:
         self._main_window.navigation.set_home(self._home_view)
 
     def _build_home_view(self, parent: tk.Widget) -> tk.Widget:
+        assert self._user_info_var is not None
+
         frame = tk.Frame(parent, bg=ui_theme.SURFACE_COLOR)
 
         welcome = tk.Label(
