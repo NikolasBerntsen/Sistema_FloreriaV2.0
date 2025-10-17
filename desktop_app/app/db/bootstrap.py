@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from contextlib import closing
 from pathlib import Path
 from typing import Iterable, List, Sequence
@@ -153,8 +154,30 @@ def _split_sql_statements(sql: str) -> List[str]:
     return statements
 
 
+def _quote_identifier(identifier: str) -> str:
+    """Return ``identifier`` quoted for MySQL statements."""
+
+    escaped = identifier.replace("`", "``")
+    return f"`{escaped}`"
+
+
+def _ensure_database(connection: MySQLConnection, schema_name: str) -> None:
+    """Create ``schema_name`` if it does not already exist."""
+
+    schema_literal = _quote_identifier(schema_name)
+    with closing(connection.cursor()) as cursor:
+        cursor.execute(f"CREATE DATABASE IF NOT EXISTS {schema_literal}")
+    connection.commit()
+    if connection.database != schema_name:
+        connection.database = schema_name
+
+
 def _execute_sql_file(
-    connection: MySQLConnection, path: Path, logger: logging.Logger
+    connection: MySQLConnection,
+    path: Path,
+    logger: logging.Logger,
+    *,
+    schema_name: str,
 ) -> None:
     if not path.exists():
         raise FileNotFoundError(f"No se encontró el archivo SQL: {path}")
@@ -163,10 +186,35 @@ def _execute_sql_file(
     statements = _split_sql_statements(sql)
 
     cursor: MySQLCursor = connection.cursor()
+    schema_literal = _quote_identifier(schema_name)
+
     try:
         for statement in statements:
+            normalized = statement.strip().lower()
+
+            if normalized.startswith("use "):
+                cursor.execute(f"USE {schema_literal}")
+                continue
+
+            if normalized.startswith("create database"):
+                cursor.execute(
+                    re.sub(
+                        r"(?i)create\s+database\s+(if\s+not\s+exists\s+)?`?[^`\s]+`?",
+                        f"CREATE DATABASE IF NOT EXISTS {schema_literal}",
+                        statement,
+                        count=1,
+                    )
+                )
+                continue
+
+            patched_statement = re.sub(
+                r"`?floreriadb`?",
+                schema_literal,
+                statement,
+                flags=re.IGNORECASE,
+            )
             try:
-                cursor.execute(statement)
+                cursor.execute(patched_statement)
             except MySQLError as exc:
                 if exc.errno == 1061:
                     logger.info(
@@ -211,7 +259,8 @@ def ensure_tables(
         logger.info("Ejecución en modo dry-run, se omite la carga de %s", sql_file)
         return False
 
-    _execute_sql_file(connection, sql_file, logger)
+    _ensure_database(connection, schema_name)
+    _execute_sql_file(connection, sql_file, logger, schema_name=schema_name)
 
     missing_after = missing_tables(connection, schema_name, tables)
     if missing_after:
