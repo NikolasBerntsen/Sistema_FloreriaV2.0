@@ -82,6 +82,76 @@ def missing_tables(
     return missing
 
 
+def _split_sql_statements(sql: str) -> List[str]:
+    """Split ``sql`` into individual statements handling comments and quotes."""
+
+    statements: List[str] = []
+    statement: List[str] = []
+    in_single_quote = False
+    in_double_quote = False
+    in_backtick = False
+    in_line_comment = False
+    in_block_comment = False
+
+    i = 0
+    length = len(sql)
+    while i < length:
+        char = sql[i]
+        next_char = sql[i + 1] if i + 1 < length else ""
+
+        if in_line_comment:
+            if char == "\n":
+                in_line_comment = False
+            i += 1
+            continue
+
+        if in_block_comment:
+            if char == "*" and next_char == "/":
+                in_block_comment = False
+                i += 2
+            else:
+                i += 1
+            continue
+
+        if not (in_single_quote or in_double_quote or in_backtick):
+            if char == "-" and next_char == "-":
+                in_line_comment = True
+                i += 2
+                continue
+            if char == "#":
+                in_line_comment = True
+                i += 1
+                continue
+            if char == "/" and next_char == "*":
+                in_block_comment = True
+                i += 2
+                continue
+
+        if char == "'" and not (in_double_quote or in_backtick):
+            in_single_quote = not in_single_quote
+        elif char == '"' and not (in_single_quote or in_backtick):
+            in_double_quote = not in_double_quote
+        elif char == "`" and not (in_single_quote or in_double_quote):
+            in_backtick = not in_backtick
+
+        if char == ";" and not (
+            in_single_quote or in_double_quote or in_backtick
+        ):
+            joined = "".join(statement).strip()
+            if joined:
+                statements.append(joined)
+            statement = []
+        else:
+            statement.append(char)
+        i += 1
+
+    trailing = "".join(statement).strip()
+    if trailing:
+        statements.append(trailing)
+
+    return statements
+
+
 def _execute_sql_file(
     connection: MySQLConnection, path: Path, logger: logging.Logger
 ) -> None:
@@ -91,8 +161,16 @@ def _execute_sql_file(
     sql = path.read_text(encoding="utf-8")
     cursor: MySQLCursor = connection.cursor()
     try:
-        for _ in cursor.execute(sql, multi=True):
-            pass
+        try:
+            for _ in cursor.execute(sql, multi=True):
+                pass
+        except TypeError as exc:
+            if "multi" not in str(exc):
+                raise
+            connection.rollback()
+            statements = _split_sql_statements(sql)
+            for statement in statements:
+                cursor.execute(statement)
         connection.commit()
     except Exception:
         connection.rollback()
