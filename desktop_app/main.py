@@ -14,6 +14,12 @@ import mysql.connector
 from mysql.connector.connection import MySQLConnection
 
 try:
+    from dotenv import find_dotenv, load_dotenv
+except ImportError:  # pragma: no cover - Dependencia opcional en tiempo de ejecución
+    find_dotenv = None  # type: ignore[assignment]
+    load_dotenv = None  # type: ignore[assignment]
+
+try:
     import tkinter as tk
     from tkinter import messagebox
 except Exception:  # pragma: no cover - Tk puede no estar disponible en entornos headless
@@ -49,10 +55,10 @@ class FloreriaApp:
         self._main_window: Optional[MainWindow] = None
         self._home_view: Optional[ViewDefinition] = None
         self._window_logo: Optional[object] = None
-        self._email_var = tk.StringVar(value="") if tk is not None else None
-        self._password_var = tk.StringVar(value="") if tk is not None else None
-        self._status_var = tk.StringVar(value="") if tk is not None else None
-        self._user_info_var = tk.StringVar(value="") if tk is not None else None
+        self._email_var: Optional[tk.StringVar] = None
+        self._password_var: Optional[tk.StringVar] = None
+        self._status_var: Optional[tk.StringVar] = None
+        self._user_info_var: Optional[tk.StringVar] = None
 
     def run(self) -> None:
         if tk is None:
@@ -61,6 +67,7 @@ class FloreriaApp:
             )
 
         self._root = tk.Tk()
+        self._initialize_variables()
         self._root.title(self._branding.name)
         self._root.geometry("960x620")
         self._root.minsize(820, 520)
@@ -83,8 +90,24 @@ class FloreriaApp:
     # ------------------------------------------------------------------
     # Construcción de vistas
     # ------------------------------------------------------------------
-    def _build_login_view(self) -> None:
+    def _initialize_variables(self) -> None:
+        """Inicializa los StringVar de Tk una vez que la raíz está disponible."""
+
         assert tk is not None and self._root is not None
+
+        self._email_var = tk.StringVar(master=self._root, value="")
+        self._password_var = tk.StringVar(master=self._root, value="")
+        self._status_var = tk.StringVar(master=self._root, value="")
+        self._user_info_var = tk.StringVar(master=self._root, value="")
+
+    def _build_login_view(self) -> None:
+        assert (
+            tk is not None
+            and self._root is not None
+            and self._email_var is not None
+            and self._password_var is not None
+            and self._status_var is not None
+        )
 
         self._login_frame = tk.Frame(self._root, padx=40, pady=40, bg=ui_theme.SURFACE_COLOR)
 
@@ -204,6 +227,8 @@ class FloreriaApp:
         self._main_window.navigation.set_home(self._home_view)
 
     def _build_home_view(self, parent: tk.Widget) -> tk.Widget:
+        assert self._user_info_var is not None
+
         frame = tk.Frame(parent, bg=ui_theme.SURFACE_COLOR)
 
         welcome = tk.Label(
@@ -390,6 +415,17 @@ def bootstrap() -> None:
     """Carga configuración, abre la conexión a MySQL y lanza la interfaz de usuario."""
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+
+    if load_dotenv is not None and find_dotenv is not None:
+        dotenv_path = find_dotenv()
+        if dotenv_path:
+            load_dotenv(dotenv_path=dotenv_path, override=False)
+            LOGGER.info("Variables de entorno cargadas desde %s", dotenv_path)
+    elif Path(".env").exists():  # pragma: no cover - Ruta de respaldo sin python-dotenv
+        LOGGER.warning(
+            "El archivo .env está presente pero python-dotenv no está instalado. "
+            "Instálalo para cargar variables automáticamente."
+        )
 
     config_path = os.getenv("FLORERIA_CONFIG_PATH")
     config = load_local_config(config_path)
