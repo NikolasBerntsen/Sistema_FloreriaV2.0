@@ -122,7 +122,7 @@ class FloreriaApp:
         title = tk.Label(
             self._login_frame,
             text=f"Iniciar sesión en {self._branding.name}",
-            font=(ui_theme.FONT_FAMILY, 20, "bold"),
+            font=ui_theme.font(20, "bold"),
             bg=ui_theme.SURFACE_COLOR,
             fg=ui_theme.TEXT_PRIMARY,
         )
@@ -133,7 +133,7 @@ class FloreriaApp:
             tagline = tk.Label(
                 self._login_frame,
                 text=self._branding.tagline,
-                font=(ui_theme.FONT_FAMILY, ui_theme.FONT_SIZE_SUBTITLE),
+                font=ui_theme.font(ui_theme.FONT_SIZE_SUBTITLE),
                 bg=ui_theme.SURFACE_COLOR,
                 fg=ui_theme.TEXT_SECONDARY,
             )
@@ -191,7 +191,7 @@ class FloreriaApp:
         status_bar = tk.Label(
             self._root,
             text=status_text,
-            font=(ui_theme.FONT_FAMILY, ui_theme.FONT_SIZE_BODY),
+            font=ui_theme.font(ui_theme.FONT_SIZE_BODY),
             anchor=tk.W,
             bd=1,
             relief=tk.SUNKEN,
@@ -243,7 +243,7 @@ class FloreriaApp:
         welcome = tk.Label(
             frame,
             text=f"Bienvenido a {self._branding.name}",
-            font=(ui_theme.FONT_FAMILY, ui_theme.FONT_SIZE_TITLE, "bold"),
+            font=ui_theme.font(ui_theme.FONT_SIZE_TITLE, "bold"),
             bg=ui_theme.SURFACE_COLOR,
             fg=ui_theme.TEXT_PRIMARY,
             pady=10,
@@ -253,7 +253,7 @@ class FloreriaApp:
         info = tk.Label(
             frame,
             textvariable=self._user_info_var,
-            font=(ui_theme.FONT_FAMILY, ui_theme.FONT_SIZE_SUBTITLE),
+            font=ui_theme.font(ui_theme.FONT_SIZE_SUBTITLE),
             bg=ui_theme.SURFACE_COLOR,
             fg=ui_theme.TEXT_SECONDARY,
             pady=4,

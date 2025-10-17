@@ -42,7 +42,7 @@ class CustomerDetailView(tk.Frame):
         header = tk.Label(
             self,
             text="Detalle del cliente",
-            font=(theme.FONT_FAMILY, 14, "bold"),
+            font=theme.font(14, "bold"),
             bg=theme.SURFACE_COLOR,
         )
         header.pack(anchor=tk.W, pady=(0, 12))
@@ -107,7 +107,7 @@ class CustomerDetailView(tk.Frame):
     def _add_summary_row(self, master: tk.Misc, label: str, variable: tk.StringVar, row: int) -> None:
         lbl = tk.Label(master, text=label)
         lbl.grid(row=row, column=0, sticky=tk.W, pady=2)
-        value = tk.Label(master, textvariable=variable, font=(theme.FONT_FAMILY, 11, "bold"))
+        value = tk.Label(master, textvariable=variable, font=theme.font(11, "bold"))
         value.grid(row=row, column=1, sticky=tk.E, pady=2)
 
     # ------------------------------------------------------------------

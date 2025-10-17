@@ -84,7 +84,7 @@ class MainWindow:
         name_label = tk.Label(
             text_frame,
             text=self.branding.name,
-            font=(theme.FONT_FAMILY, theme.FONT_SIZE_TITLE, "bold"),
+            font=theme.font(theme.FONT_SIZE_TITLE, "bold"),
             bg=theme.SURFACE_COLOR,
             fg=theme.TEXT_PRIMARY,
         )
@@ -94,7 +94,7 @@ class MainWindow:
             tagline_label = tk.Label(
                 text_frame,
                 text=self.branding.tagline,
-                font=(theme.FONT_FAMILY, theme.FONT_SIZE_SUBTITLE),
+                font=theme.font(theme.FONT_SIZE_SUBTITLE),
                 bg=theme.SURFACE_COLOR,
                 fg=theme.TEXT_SECONDARY,
             )
@@ -107,7 +107,7 @@ class MainWindow:
         breadcrumb_label = tk.Label(
             nav_frame,
             textvariable=self._breadcrumb_var,
-            font=(theme.FONT_FAMILY, theme.FONT_SIZE_BODY),
+            font=theme.font(theme.FONT_SIZE_BODY),
             bg=theme.SURFACE_COLOR,
             fg=theme.TEXT_SECONDARY,
         )

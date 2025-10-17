@@ -21,6 +21,7 @@ __all__ = [
     "style_secondary_button",
     "register_shortcut",
     "apply_base_theme",
+    "font",
 ]
 
 BACKGROUND_COLOR = "#F5F7FA"
@@ -35,14 +36,31 @@ FONT_SIZE_SUBTITLE = 12
 FONT_SIZE_BODY = 10
 
 
+def _family_token() -> str:
+    """Return a font family token safe for Tk, quoting spaces when necessary."""
+
+    if " " in FONT_FAMILY and not FONT_FAMILY.startswith("{"):
+        return f"{{{FONT_FAMILY}}}"
+    return FONT_FAMILY
+
+
+def font(size: int, *modifiers: str) -> tuple[str, ...]:
+    """Build a Tk font tuple that supports family names with spaces."""
+
+    family = _family_token()
+    if modifiers:
+        return (family, size, *modifiers)
+    return (family, size)
+
+
 def apply_base_theme(root: tk.Misc) -> None:
     """Configura colores y tipografías base para la ventana principal."""
 
     root.configure(bg=BACKGROUND_COLOR)
-    root.option_add("*Font", f"{FONT_FAMILY} {FONT_SIZE_BODY}")
+    root.option_add("*Font", f"{_family_token()} {FONT_SIZE_BODY}")
     root.option_add("*Label.background", SURFACE_COLOR)
     root.option_add("*Label.foreground", TEXT_PRIMARY)
-    root.option_add("*Button.font", f"{FONT_FAMILY} {FONT_SIZE_BODY}")
+    root.option_add("*Button.font", f"{_family_token()} {FONT_SIZE_BODY}")
 
 
 def style_primary_button(button: tk.Button) -> None:
@@ -118,7 +136,7 @@ class Tooltip:
             text=self.text,
             bg=TEXT_PRIMARY,
             fg="white",
-            font=(FONT_FAMILY, FONT_SIZE_BODY),
+            font=font(FONT_SIZE_BODY),
             padx=8,
             pady=4,
         )

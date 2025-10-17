@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
 from typing import Any, Dict, Mapping, Optional
+from urllib.parse import parse_qs, urlparse
 
 __all__ = [
     "DatabaseConfig",
@@ -118,6 +120,46 @@ def _validate_schema(payload: Mapping[str, Any]) -> DatabaseConfig:
     )
 
 
+def _config_from_dsn(dsn: str) -> DatabaseConfig:
+    """Build a database configuration from a MySQL DSN string."""
+
+    parsed = urlparse(dsn)
+    if parsed.scheme not in {"mysql", "mysql+mysqlconnector"}:
+        raise ConfigError("El DSN debe utilizar el esquema mysql")
+
+    host = parsed.hostname or "localhost"
+    port = parsed.port or 3306
+    username = parsed.username or ""
+    password = parsed.password or ""
+    schema = parsed.path.lstrip("/") or "floreriadb"
+
+    overrides = parse_qs(parsed.query)
+
+    def _override(key: str, current: str) -> str:
+        values = overrides.get(key)
+        if not values:
+            return current
+        candidate = values[-1]
+        return candidate if isinstance(candidate, str) and candidate else current
+
+    host = _override("host", host)
+    username = _override("user", username)
+    password = _override("password", password)
+    schema = _override("database", schema)
+
+    port_override = overrides.get("port")
+    if port_override:
+        try:
+            port = int(port_override[-1])
+        except (TypeError, ValueError) as exc:
+            raise ConfigError("El parámetro 'port' del DSN debe ser numérico") from exc
+
+    if not username:
+        raise ConfigError("El DSN no incluye el usuario de la base de datos")
+
+    return DatabaseConfig(host=host, port=port, username=username, password=password, schema=schema)
+
+
 def load_database_config(path: Optional[Path] = None, *, reload: bool = False) -> DatabaseConfig:
     """Load and validate the database configuration from ``config/database.json``.
 
@@ -144,6 +186,12 @@ def load_database_config(path: Optional[Path] = None, *, reload: bool = False) -
             return _config_cache
 
         if not path.exists():
+            dsn = os.getenv("FLORERIA_DB_DSN")
+            if dsn:
+                config = _config_from_dsn(dsn)
+                if path == _DEFAULT_CONFIG_PATH:
+                    _config_cache = config
+                return config
             raise ConfigError(f"No se encontró el archivo de configuración: {path}")
 
         try:

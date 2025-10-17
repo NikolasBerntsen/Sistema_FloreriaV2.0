@@ -76,7 +76,7 @@ class InitialAdminDialog:
             text="No se encontraron usuarios. Configure el administrador inicial.",
             bg=theme.SURFACE_COLOR,
             fg=theme.TEXT_PRIMARY,
-            font=(theme.FONT_FAMILY, theme.FONT_SIZE_SUBTITLE, "bold"),
+            font=theme.font(theme.FONT_SIZE_SUBTITLE, "bold"),
             wraplength=420,
             justify=tk.LEFT,
         )
