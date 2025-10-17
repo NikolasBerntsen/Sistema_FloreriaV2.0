@@ -27,6 +27,10 @@ from app.services.auth_service import (
     logout as logout_user,
 )
 from app.services.audit_service import log_audit
+from app.services.branding_service import BrandingInfo, get_branding
+from app.ui import theme as ui_theme
+from app.ui.main_window import MainWindow, MenuItem
+from app.ui.navigation import ViewDefinition
 from app.utils.security import AuthorizationError, requires_role
 
 
@@ -39,14 +43,16 @@ class FloreriaApp:
     def __init__(self, connection: MySQLConnection, config: Dict[str, Any]) -> None:
         self._connection = connection
         self._config = config
+        self._branding: BrandingInfo = get_branding(config)
         self._root: Optional[tk.Tk] = None if tk is not None else None
         self._login_frame: Optional[tk.Frame] = None
-        self._dashboard_frame: Optional[tk.Frame] = None
+        self._main_window: Optional[MainWindow] = None
+        self._home_view: Optional[ViewDefinition] = None
+        self._window_logo: Optional[object] = None
         self._email_var = tk.StringVar(value="") if tk is not None else None
         self._password_var = tk.StringVar(value="") if tk is not None else None
         self._status_var = tk.StringVar(value="") if tk is not None else None
         self._user_info_var = tk.StringVar(value="") if tk is not None else None
-        self._admin_button: Optional[tk.Button] = None
 
     def run(self) -> None:
         if tk is None:
@@ -55,10 +61,18 @@ class FloreriaApp:
             )
 
         self._root = tk.Tk()
-        self._root.title("Florería Carlitos")
-        self._root.geometry("640x420")
-        self._root.minsize(520, 360)
+        self._root.title(self._branding.name)
+        self._root.geometry("960x620")
+        self._root.minsize(820, 520)
+        self._root.configure(bg=ui_theme.BACKGROUND_COLOR)
         self._root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        if self._branding.logo_path:
+            try:
+                self._window_logo = tk.PhotoImage(file=str(self._branding.logo_path))
+                self._root.iconphoto(True, self._window_logo)
+            except Exception:  # pragma: no cover - depende de archivos externos
+                LOGGER.warning("No se pudo establecer el icono de la ventana", exc_info=True)
 
         self._build_login_view()
         self._build_status_bar()
@@ -72,41 +86,66 @@ class FloreriaApp:
     def _build_login_view(self) -> None:
         assert tk is not None and self._root is not None
 
-        self._login_frame = tk.Frame(self._root, padx=40, pady=40)
+        self._login_frame = tk.Frame(self._root, padx=40, pady=40, bg=ui_theme.SURFACE_COLOR)
 
         title = tk.Label(
             self._login_frame,
-            text="Iniciar sesión",
-            font=("Helvetica", 18, "bold"),
+            text=f"Iniciar sesión en {self._branding.name}",
+            font=(ui_theme.FONT_FAMILY, 20, "bold"),
+            bg=ui_theme.SURFACE_COLOR,
+            fg=ui_theme.TEXT_PRIMARY,
         )
-        title.grid(row=0, column=0, columnspan=2, pady=(0, 20))
+        title.grid(row=0, column=0, columnspan=2, pady=(0, 12))
 
-        email_label = tk.Label(self._login_frame, text="Correo electrónico")
-        email_entry = tk.Entry(self._login_frame, textvariable=self._email_var, width=35)
-        email_label.grid(row=1, column=0, sticky=tk.W, pady=5)
-        email_entry.grid(row=1, column=1, pady=5)
+        row_offset = 0
+        if self._branding.tagline:
+            tagline = tk.Label(
+                self._login_frame,
+                text=self._branding.tagline,
+                font=(ui_theme.FONT_FAMILY, ui_theme.FONT_SIZE_SUBTITLE),
+                bg=ui_theme.SURFACE_COLOR,
+                fg=ui_theme.TEXT_SECONDARY,
+            )
+            tagline.grid(row=1, column=0, columnspan=2, pady=(0, 18))
+            row_offset = 1
 
-        password_label = tk.Label(self._login_frame, text="Contraseña")
+        email_label = tk.Label(
+            self._login_frame,
+            text="Correo electrónico",
+            bg=ui_theme.SURFACE_COLOR,
+            fg=ui_theme.TEXT_PRIMARY,
+        )
+        email_entry = tk.Entry(self._login_frame, textvariable=self._email_var, width=38)
+        email_label.grid(row=1 + row_offset, column=0, sticky=tk.W, pady=5)
+        email_entry.grid(row=1 + row_offset, column=1, pady=5)
+
+        password_label = tk.Label(
+            self._login_frame,
+            text="Contraseña",
+            bg=ui_theme.SURFACE_COLOR,
+            fg=ui_theme.TEXT_PRIMARY,
+        )
         password_entry = tk.Entry(
-            self._login_frame, textvariable=self._password_var, width=35, show="*"
+            self._login_frame, textvariable=self._password_var, width=38, show="*"
         )
-        password_label.grid(row=2, column=0, sticky=tk.W, pady=5)
-        password_entry.grid(row=2, column=1, pady=5)
+        password_label.grid(row=2 + row_offset, column=0, sticky=tk.W, pady=5)
+        password_entry.grid(row=2 + row_offset, column=1, pady=5)
 
         login_button = tk.Button(
             self._login_frame,
             text="Ingresar",
-            width=20,
             command=self._handle_login,
         )
-        login_button.grid(row=3, column=0, columnspan=2, pady=(15, 10))
+        ui_theme.style_primary_button(login_button)
+        login_button.grid(row=3 + row_offset, column=0, columnspan=2, pady=(18, 12))
 
         status_message = tk.Label(
             self._login_frame,
             textvariable=self._status_var,
-            fg="red",
+            bg=ui_theme.SURFACE_COLOR,
+            fg="#C0392B",
         )
-        status_message.grid(row=4, column=0, columnspan=2)
+        status_message.grid(row=4 + row_offset, column=0, columnspan=2)
 
         password_entry.bind("<Return>", lambda event: self._handle_login())
 
@@ -120,65 +159,82 @@ class FloreriaApp:
         status_bar = tk.Label(
             self._root,
             text=status_text,
-            font=("Helvetica", 9),
+            font=(ui_theme.FONT_FAMILY, ui_theme.FONT_SIZE_BODY),
             anchor=tk.W,
             bd=1,
             relief=tk.SUNKEN,
-            padx=10,
+            padx=12,
+            bg=ui_theme.SURFACE_COLOR,
         )
         status_bar.pack(side=tk.BOTTOM, fill=tk.X)
 
     def _ensure_dashboard(self) -> None:
         assert tk is not None and self._root is not None
 
-        if self._dashboard_frame is not None:
+        if self._main_window is not None:
             return
 
-        self._dashboard_frame = tk.Frame(self._root, padx=30, pady=30)
+        menu_items = [
+            MenuItem(
+                text="Panel administrativo",
+                command=self._handle_admin_panel,
+                tooltip="Acceder al panel administrativo",
+                shortcut="<Control-Shift-A>",
+            ),
+            MenuItem(
+                text="Cerrar sesión",
+                command=self._handle_logout,
+                tooltip="Cerrar la sesión actual",
+                shortcut="<Control-L>",
+            ),
+        ]
+
+        self._main_window = MainWindow(
+            self._root,
+            self._branding,
+            side_menu_items=menu_items,
+        )
+
+        self._home_view = ViewDefinition(
+            identifier="dashboard.home",
+            title="Inicio",
+            breadcrumbs=("Inicio",),
+            factory=self._build_home_view,
+        )
+        self._main_window.navigation.set_home(self._home_view)
+
+    def _build_home_view(self, parent: tk.Widget) -> tk.Widget:
+        frame = tk.Frame(parent, bg=ui_theme.SURFACE_COLOR)
 
         welcome = tk.Label(
-            self._dashboard_frame,
-            text="Bienvenido a Florería Carlitos",
-            font=("Helvetica", 16, "bold"),
+            frame,
+            text=f"Bienvenido a {self._branding.name}",
+            font=(ui_theme.FONT_FAMILY, ui_theme.FONT_SIZE_TITLE, "bold"),
+            bg=ui_theme.SURFACE_COLOR,
+            fg=ui_theme.TEXT_PRIMARY,
             pady=10,
         )
-        welcome.pack()
+        welcome.pack(anchor=tk.W)
 
-        user_info = tk.Label(
-            self._dashboard_frame,
+        info = tk.Label(
+            frame,
             textvariable=self._user_info_var,
-            font=("Helvetica", 11),
-            pady=5,
+            font=(ui_theme.FONT_FAMILY, ui_theme.FONT_SIZE_SUBTITLE),
+            bg=ui_theme.SURFACE_COLOR,
+            fg=ui_theme.TEXT_SECONDARY,
+            pady=4,
         )
-        user_info.pack()
+        info.pack(anchor=tk.W)
 
-        button_bar = tk.Frame(self._dashboard_frame, pady=20)
-        button_bar.pack()
-
-        admin_button = tk.Button(
-            button_bar,
-            text="Panel administrativo",
-            width=22,
-            command=self._handle_admin_panel,
-        )
-        admin_button.grid(row=0, column=0, padx=10)
-        self._admin_button = admin_button
-
-        logout_button = tk.Button(
-            button_bar,
-            text="Cerrar sesión",
-            width=18,
-            command=self._handle_logout,
-        )
-        logout_button.grid(row=0, column=1, padx=10)
+        return frame
 
     # ------------------------------------------------------------------
     # Gestión de eventos
     # ------------------------------------------------------------------
     def _show_login_view(self) -> None:
         assert tk is not None
-        if self._dashboard_frame is not None:
-            self._dashboard_frame.pack_forget()
+        if self._main_window is not None:
+            self._main_window.hide()
 
         if self._login_frame is not None:
             self._status_var.set("")
@@ -198,12 +254,14 @@ class FloreriaApp:
         if session is not None:
             display_name = session.full_name or session.email
             self._user_info_var.set(f"Usuario: {display_name} • Rol: {session.role}")
-            if self._admin_button is not None:
-                state = tk.NORMAL if session.role.upper() == "ADMIN" else tk.DISABLED
-                self._admin_button.config(state=state)
+            if self._main_window is not None:
+                self._main_window.set_menu_enabled(0, session.role.upper() == "ADMIN")
+        else:
+            self._user_info_var.set("")
 
-        if self._dashboard_frame is not None:
-            self._dashboard_frame.pack(expand=True, fill=tk.BOTH)
+        if self._main_window is not None:
+            self._main_window.show()
+            self._main_window.navigation.go_home()
 
     def _handle_login(self) -> None:
         assert tk is not None
@@ -225,6 +283,8 @@ class FloreriaApp:
 
     def _handle_logout(self) -> None:
         logout_user()
+        if self._main_window is not None:
+            self._main_window.navigation.reset()
         self._show_login_view()
 
     @requires_role("ADMIN")
@@ -331,9 +391,10 @@ def bootstrap() -> None:
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 
-    LOGGER.info("Iniciando aplicación de escritorio Florería Carlitos")
     config_path = os.getenv("FLORERIA_CONFIG_PATH")
     config = load_local_config(config_path)
+    branding = get_branding(config)
+    LOGGER.info("Iniciando aplicación de escritorio %s", branding.name)
 
     dsn = os.getenv("FLORERIA_DB_DSN")
 
