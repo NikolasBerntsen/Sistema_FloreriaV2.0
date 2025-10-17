@@ -22,10 +22,18 @@ CREATE TABLE IF NOT EXISTS users (
   email VARCHAR(150) NOT NULL UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
   is_active TINYINT(1) NOT NULL DEFAULT 1,
+  last_login_at DATETIME DEFAULT NULL,
+  must_reset_password TINYINT(1) NOT NULL DEFAULT 0,
+  password_reset_token VARCHAR(255) DEFAULT NULL,
+  password_reset_expires_at DATETIME DEFAULT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_users_role FOREIGN KEY (role_id) REFERENCES roles(id)
 ) ENGINE=InnoDB;
+
+CREATE INDEX idx_users_role_id ON users(role_id);
+CREATE INDEX idx_users_last_login ON users(last_login_at);
+CREATE INDEX idx_users_reset_token ON users(password_reset_token);
 
 CREATE TABLE IF NOT EXISTS payment_methods (
   id INT AUTO_INCREMENT PRIMARY KEY,
@@ -179,4 +187,20 @@ CREATE TABLE IF NOT EXISTS shipment_status_history (
 ) ENGINE=InnoDB;
 
 CREATE INDEX idx_shipment_status_history_shipment ON shipment_status_history(shipment_id, changed_at);
+
+CREATE TABLE IF NOT EXISTS audit_log (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  actor VARCHAR(150) NOT NULL,
+  actor_user_id INT DEFAULT NULL,
+  entity VARCHAR(120) NOT NULL,
+  entity_id VARCHAR(120) DEFAULT NULL,
+  action VARCHAR(120) NOT NULL,
+  before_state JSON DEFAULT NULL,
+  after_state JSON DEFAULT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_audit_log_actor FOREIGN KEY (actor_user_id) REFERENCES users(id)
+    ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE INDEX idx_audit_log_entity_action ON audit_log(entity, action, created_at);
 
