@@ -7,6 +7,7 @@ from contextlib import closing
 from pathlib import Path
 from typing import Iterable, List, Sequence
 
+from mysql.connector import Error as MySQLError
 from mysql.connector.connection import MySQLConnection
 from mysql.connector.cursor import MySQLCursor
 
@@ -159,18 +160,22 @@ def _execute_sql_file(
         raise FileNotFoundError(f"No se encontró el archivo SQL: {path}")
 
     sql = path.read_text(encoding="utf-8")
+    statements = _split_sql_statements(sql)
+
     cursor: MySQLCursor = connection.cursor()
     try:
-        try:
-            for _ in cursor.execute(sql, multi=True):
-                pass
-        except TypeError as exc:
-            if "multi" not in str(exc):
-                raise
-            connection.rollback()
-            statements = _split_sql_statements(sql)
-            for statement in statements:
+        for statement in statements:
+            try:
                 cursor.execute(statement)
+            except MySQLError as exc:
+                if exc.errno == 1061:
+                    logger.info(
+                        "Índice duplicado detectado al ejecutar %s: %s. Se omite.",
+                        path.name,
+                        exc.msg,
+                    )
+                    continue
+                raise
         connection.commit()
     except Exception:
         connection.rollback()
