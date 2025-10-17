@@ -12,6 +12,7 @@ from .auth_service import (
     verify_password,
 )
 from .branding_service import BrandingInfo, get_branding
+from .user_service import InitialAdmin, UserService, user_service
 
 __all__ = [
     "AuthenticationError",
@@ -25,4 +26,7 @@ __all__ = [
     "verify_password",
     "BrandingInfo",
     "get_branding",
+    "InitialAdmin",
+    "UserService",
+    "user_service",
 ]
