@@ -65,7 +65,13 @@ class UserService:
 
         password_hash = hash_password(data.password)
 
-        connection.start_transaction()
+        if getattr(connection, "in_transaction", False):
+            LOGGER.debug(
+                "Reutilizando transacción abierta para crear el administrador inicial"
+            )
+        else:
+            connection.start_transaction()
+
         try:
             role_id = self.ensure_admin_role(connection)
             user_id = user_repository.create(

@@ -6,7 +6,7 @@ import logging
 import re
 from contextlib import closing
 from pathlib import Path
-from typing import Iterable, List, Sequence
+from typing import Iterable, List, Mapping, MutableMapping, Sequence, Set
 
 from mysql.connector import Error as MySQLError
 from mysql.connector.connection import MySQLConnection
@@ -17,9 +17,11 @@ __all__ = [
     "EXTENSION_TABLES",
     "SCHEMA_FILE",
     "EXTENSION_FILE",
+    "SEED_FILE",
     "database_exists",
     "missing_tables",
     "ensure_tables",
+    "ensure_seed_data",
     "initialize_database",
 ]
 
@@ -28,6 +30,7 @@ ROOT_DIR = Path(__file__).resolve().parents[3]
 SQL_DIR = ROOT_DIR / "db"
 SCHEMA_FILE = SQL_DIR / "schema.sql"
 EXTENSION_FILE = SQL_DIR / "extension.sql"
+SEED_FILE = SQL_DIR / "seed.sql"
 
 SCHEMA_TABLES: Sequence[str] = (
     "roles",
@@ -52,6 +55,25 @@ EXTENSION_TABLES: Sequence[str] = (
     "product_price_history",
     "lost_orders",
 )
+
+
+SeedRequirement = Mapping[str, Set[str]]
+
+SEED_REQUIREMENTS: Mapping[str, SeedRequirement] = {
+    "roles": {"name": {"ADMIN", "SALES", "LOGISTICS"}},
+    "payment_methods": {
+        "code": {"CASH", "CARD", "BANK_TRANSFER", "MOBILE_WALLET"}
+    },
+    "logistic_statuses": {
+        "code": {
+            "PENDING_PICKUP",
+            "IN_TRANSIT",
+            "DELIVERED",
+            "RETURNED",
+            "CANCELLED",
+        }
+    },
+}
 
 
 def database_exists(connection: MySQLConnection, schema_name: str) -> bool:
@@ -272,6 +294,68 @@ def ensure_tables(
     return True
 
 
+def _missing_seed_values(
+    connection: MySQLConnection,
+    requirements: Mapping[str, SeedRequirement],
+) -> MutableMapping[str, Set[str]]:
+    missing: MutableMapping[str, Set[str]] = {}
+    for table, columns in requirements.items():
+        for column, expected_values in columns.items():
+            if not expected_values:
+                continue
+            placeholders = ", ".join(["%s"] * len(expected_values))
+            column_literal = _quote_identifier(column)
+            query = (
+                f"SELECT {column_literal} FROM {_quote_identifier(table)} "
+                f"WHERE {column_literal} IN ({placeholders})"
+            )
+            with closing(connection.cursor()) as cursor:
+                cursor.execute(query, tuple(sorted(expected_values)))
+                present = {row[0] for row in cursor.fetchall()}
+            missing_values = set(expected_values) - present
+            if missing_values:
+                missing.setdefault(table, set()).update(missing_values)
+    return missing
+
+
+def ensure_seed_data(
+    connection: MySQLConnection,
+    schema_name: str,
+    *,
+    logger: logging.Logger | None = None,
+) -> bool:
+    """Ensure reference data exists by executing ``seed.sql`` when required."""
+
+    logger = logger or logging.getLogger("app.db.bootstrap")
+    _ensure_database(connection, schema_name)
+
+    missing_values = _missing_seed_values(connection, SEED_REQUIREMENTS)
+    if not missing_values:
+        logger.info("Los datos de referencia ya existen. Se omite seed.sql")
+        return False
+
+    logger.info(
+        "Datos de referencia faltantes: %s",
+        ", ".join(
+            f"{table}:{sorted(values)}" for table, values in sorted(missing_values.items())
+        ),
+    )
+
+    _execute_sql_file(connection, SEED_FILE, logger, schema_name=schema_name)
+
+    missing_after = _missing_seed_values(connection, SEED_REQUIREMENTS)
+    if missing_after:
+        raise RuntimeError(
+            "Persisten datos de referencia faltantes luego de ejecutar seed.sql: "
+            + ", ".join(
+                f"{table}:{sorted(values)}"
+                for table, values in sorted(missing_after.items())
+            )
+        )
+
+    return True
+
+
 def initialize_database(
     connection: MySQLConnection,
     schema_name: str,
@@ -302,5 +386,7 @@ def initialize_database(
             or changed
         )
 
-    return changed
+    seed_changed = ensure_seed_data(connection, schema_name, logger=logger)
+
+    return changed or seed_changed
 
