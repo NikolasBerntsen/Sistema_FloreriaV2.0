@@ -15,6 +15,8 @@ __all__ = [
     "UserRepository",
     "customer_repository",
     "user_repository",
+    "RoleRepository",
+    "role_repository",
 ]
 
 _LAZY_EXPORTS: dict[str, Tuple[str, str]] = {
@@ -22,6 +24,8 @@ _LAZY_EXPORTS: dict[str, Tuple[str, str]] = {
     "customer_repository": (".customer_repository", "customer_repository"),
     "UserRepository": (".user_repository", "UserRepository"),
     "user_repository": (".user_repository", "user_repository"),
+    "RoleRepository": (".role_repository", "RoleRepository"),
+    "role_repository": (".role_repository", "role_repository"),
 }
 
 
