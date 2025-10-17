@@ -5,6 +5,7 @@ from typing import Any, Mapping, MutableMapping, Optional
 from mysql.connector.connection import MySQLConnection
 
 from app.db.connection import with_connection, with_transaction
+from app.services.audit_service import log_audit
 
 from .base import BaseRepository, PaginatedResult
 
@@ -89,6 +90,8 @@ class CustomerRepository(BaseRepository):
         self,
         data: Mapping[str, Any],
         *,
+        actor: Optional[str] = None,
+        actor_id: Optional[int] = None,
         connection: MySQLConnection,
     ) -> MutableMapping[str, Any]:
         """Insert a new customer and return the persisted record."""
@@ -97,6 +100,15 @@ class CustomerRepository(BaseRepository):
         customer = self.get_by_id(connection, customer_id)
         if customer is None:  # pragma: no cover - defensive
             raise RuntimeError("No se pudo recuperar el cliente recién creado")
+        log_audit(
+            actor=actor or "sistema",
+            actor_id=actor_id,
+            entity="customer",
+            entity_id=str(customer_id),
+            action="create",
+            after=dict(customer),
+            connection=connection,
+        )
         return customer
 
     @with_transaction
@@ -105,9 +117,15 @@ class CustomerRepository(BaseRepository):
         customer_id: int,
         data: Mapping[str, Any],
         *,
+        actor: Optional[str] = None,
+        actor_id: Optional[int] = None,
         connection: MySQLConnection,
     ) -> MutableMapping[str, Any]:
         """Update an existing customer and return the updated record."""
+
+        current = self.get_by_id(connection, customer_id, for_update=True)
+        if current is None:
+            raise RuntimeError(f"Cliente {customer_id} no encontrado")
 
         updated = self.update(connection, customer_id, data)
         if not updated:
@@ -115,6 +133,16 @@ class CustomerRepository(BaseRepository):
         customer = self.get_by_id(connection, customer_id)
         if customer is None:  # pragma: no cover - defensive
             raise RuntimeError("No se pudo recuperar el cliente actualizado")
+        log_audit(
+            actor=actor or "sistema",
+            actor_id=actor_id,
+            entity="customer",
+            entity_id=str(customer_id),
+            action="update",
+            before=dict(current),
+            after=dict(customer),
+            connection=connection,
+        )
         return customer
 
     @with_transaction
@@ -122,11 +150,24 @@ class CustomerRepository(BaseRepository):
         self,
         customer_id: int,
         *,
+        actor: Optional[str] = None,
+        actor_id: Optional[int] = None,
         connection: MySQLConnection,
     ) -> bool:
         """Delete a customer. Returns ``True`` if a row was removed."""
 
+        current = self.get_by_id(connection, customer_id, for_update=True)
         deleted = self.delete(connection, customer_id)
+        if deleted and current:
+            log_audit(
+                actor=actor or "sistema",
+                actor_id=actor_id,
+                entity="customer",
+                entity_id=str(customer_id),
+                action="delete",
+                before=dict(current),
+                connection=connection,
+            )
         return bool(deleted)
 
 
