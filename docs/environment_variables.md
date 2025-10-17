@@ -1,6 +1,6 @@
 # Variables de entorno de Florería Carlitos
 
-Este documento detalla cada una de las variables de entorno que la aplicación de escritorio utiliza para inicializarse correctamente. Las variables pueden definirse en el sistema operativo, en un archivo `.env` cargado por el shell o en el gestor de procesos utilizado para ejecutar la aplicación.
+Este documento detalla cada una de las variables de entorno que la aplicación de escritorio utiliza para inicializarse correctamente. Las variables pueden definirse en el sistema operativo, en un archivo `.env` cargado por el shell o en el gestor de procesos utilizado para ejecutar la aplicación. A partir de la versión actual, el archivo `.env` que se encuentre en la raíz del proyecto se cargará automáticamente durante el arranque si está disponible la dependencia `python-dotenv`.
 
 ## Tabla resumen
 
