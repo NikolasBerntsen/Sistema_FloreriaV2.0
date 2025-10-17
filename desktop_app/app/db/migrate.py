@@ -17,40 +17,19 @@ from __future__ import annotations
 import argparse
 import logging
 import os
-from pathlib import Path
-from typing import Iterable, List
+from typing import List
 
 import mysql.connector
 from mysql.connector.connection import MySQLConnection
-from mysql.connector.cursor import MySQLCursor
 
-ROOT_DIR = Path(__file__).resolve().parents[3]
-SQL_DIR = ROOT_DIR / "db"
-SCHEMA_FILE = SQL_DIR / "schema.sql"
-EXTENSION_FILE = SQL_DIR / "extension.sql"
-
-SCHEMA_TABLES: List[str] = [
-    "roles",
-    "users",
-    "payment_methods",
-    "logistic_statuses",
-    "product_categories",
-    "products",
-    "customers",
-    "customer_addresses",
-    "orders",
-    "order_items",
-    "payments",
-    "shipments",
-    "shipment_status_history",
-]
-
-EXTENSION_TABLES: List[str] = [
-    "inventory_movements",
-    "inventory_levels",
-    "product_price_history",
-    "lost_orders",
-]
+from .bootstrap import (
+    EXTENSION_FILE,
+    EXTENSION_TABLES,
+    SCHEMA_FILE,
+    SCHEMA_TABLES,
+    ensure_tables,
+    missing_tables,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -83,48 +62,6 @@ def connect_mysql(args: argparse.Namespace) -> MySQLConnection:
     )
 
 
-def database_exists(connection: MySQLConnection, schema_name: str) -> bool:
-    query = "SELECT 1 FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = %s"
-    with connection.cursor() as cursor:
-        cursor.execute(query, (schema_name,))
-        return cursor.fetchone() is not None
-
-
-def table_exists(connection: MySQLConnection, schema_name: str, table_name: str) -> bool:
-    query = (
-        "SELECT 1 FROM INFORMATION_SCHEMA.TABLES "
-        "WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s LIMIT 1"
-    )
-    with connection.cursor() as cursor:
-        cursor.execute(query, (schema_name, table_name))
-        return cursor.fetchone() is not None
-
-
-def missing_tables(connection: MySQLConnection, schema_name: str, tables: Iterable[str]) -> List[str]:
-    if not database_exists(connection, schema_name):
-        return list(tables)
-    return [table for table in tables if not table_exists(connection, schema_name, table)]
-
-
-def execute_sql_file(connection: MySQLConnection, path: Path, logger: logging.Logger) -> None:
-    if not path.exists():
-        raise FileNotFoundError(f"No se encontró el archivo SQL: {path}")
-
-    sql = path.read_text(encoding="utf-8")
-    logger.info("Ejecutando %s", path)
-    cursor: MySQLCursor = connection.cursor()
-    try:
-        for _ in cursor.execute(sql, multi=True):
-            pass
-        connection.commit()
-    except mysql.connector.Error:
-        connection.rollback()
-        logger.exception("Error al ejecutar %s", path)
-        raise
-    finally:
-        cursor.close()
-
-
 def main() -> None:
     args = parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -137,42 +74,47 @@ def main() -> None:
     schema_name = args.database
 
     try:
-        missing_core = missing_tables(connection, schema_name, SCHEMA_TABLES)
+        missing_core: List[str] = missing_tables(connection, schema_name, SCHEMA_TABLES)
         if missing_core:
             logger.info("Tablas base faltantes: %s", ", ".join(missing_core))
-            if args.dry_run:
-                logger.info("Ejecución en modo dry-run, se omite la carga de %s", SCHEMA_FILE)
-            else:
-                execute_sql_file(connection, SCHEMA_FILE, logger)
-                missing_core = missing_tables(connection, schema_name, SCHEMA_TABLES)
-                if missing_core:
-                    raise RuntimeError(
-                        "Las tablas base siguen faltando luego de ejecutar schema.sql: "
-                        + ", ".join(missing_core)
-                    )
-        else:
-            logger.info("Las tablas base ya existen, no se ejecuta schema.sql")
+        core_applied = ensure_tables(
+            connection,
+            schema_name,
+            SCHEMA_TABLES,
+            SCHEMA_FILE,
+            logger=logger,
+            dry_run=args.dry_run,
+        )
+        if core_applied:
+            logger.info("Se ejecutó %s para crear tablas base", SCHEMA_FILE)
 
-        missing_ext = missing_tables(connection, schema_name, EXTENSION_TABLES)
+        missing_ext: List[str] = missing_tables(connection, schema_name, EXTENSION_TABLES)
         if missing_ext:
             logger.info("Tablas de extensión faltantes: %s", ", ".join(missing_ext))
-            if args.dry_run:
-                logger.info("Ejecución en modo dry-run, se omite la carga de %s", EXTENSION_FILE)
-            else:
-                execute_sql_file(connection, EXTENSION_FILE, logger)
-                missing_ext = missing_tables(connection, schema_name, EXTENSION_TABLES)
-                if missing_ext:
-                    raise RuntimeError(
-                        "Las tablas de extensión siguen faltando luego de ejecutar extension.sql: "
-                        + ", ".join(missing_ext)
-                    )
-        else:
-            logger.info("Las tablas de extensión ya existen, no se ejecuta extension.sql")
+        ext_applied = ensure_tables(
+            connection,
+            schema_name,
+            EXTENSION_TABLES,
+            EXTENSION_FILE,
+            logger=logger,
+            dry_run=args.dry_run,
+        )
+        if ext_applied:
+            logger.info("Se ejecutó %s para crear tablas de extensión", EXTENSION_FILE)
 
-        if not missing_core and not missing_ext:
-            logger.info("La base de datos ya estaba actualizada. No se realizaron cambios.")
+        remaining = missing_tables(connection, schema_name, SCHEMA_TABLES + EXTENSION_TABLES)
+        if remaining:
+            raise RuntimeError(
+                "Persisten tablas faltantes luego de la migración: " + ", ".join(remaining)
+            )
+
+        if missing_core or missing_ext:
+            if args.dry_run:
+                logger.info("Ejecución en modo dry-run completada. No se aplicaron cambios.")
+            else:
+                logger.info("Migración completada correctamente.")
         else:
-            logger.info("Migración completada correctamente.")
+            logger.info("La base de datos ya estaba actualizada. No se realizaron cambios.")
     finally:
         connection.close()
 

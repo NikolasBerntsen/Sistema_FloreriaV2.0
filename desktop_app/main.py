@@ -26,6 +26,7 @@ except Exception:  # pragma: no cover - Tk puede no estar disponible en entornos
     tk = None
     messagebox = None
 
+from app.db.bootstrap import initialize_database
 from app.services.auth_service import (
     AuthenticationError,
     authenticate,
@@ -34,7 +35,9 @@ from app.services.auth_service import (
 )
 from app.services.audit_service import log_audit
 from app.services.branding_service import BrandingInfo, get_branding
+from app.services.user_service import UserService, user_service
 from app.ui import theme as ui_theme
+from app.ui.admin import InitialAdminDialog
 from app.ui.main_window import MainWindow, MenuItem
 from app.ui.navigation import ViewDefinition
 from app.utils.security import AuthorizationError, requires_role
@@ -59,6 +62,9 @@ class FloreriaApp:
         self._password_var: Optional[tk.StringVar] = None
         self._status_var: Optional[tk.StringVar] = None
         self._user_info_var: Optional[tk.StringVar] = None
+        self._login_button: Optional[tk.Button] = None
+        self._admin_dialog: Optional[InitialAdminDialog] = None
+        self._user_service: UserService = user_service
 
     def run(self) -> None:
         if tk is None:
@@ -84,6 +90,8 @@ class FloreriaApp:
         self._build_login_view()
         self._build_status_bar()
         self._show_login_view()
+
+        self._root.after(150, self._ensure_initial_admin)
 
         self._root.mainloop()
 
@@ -161,6 +169,7 @@ class FloreriaApp:
         )
         ui_theme.style_primary_button(login_button)
         login_button.grid(row=3 + row_offset, column=0, columnspan=2, pady=(18, 12))
+        self._login_button = login_button
 
         status_message = tk.Label(
             self._login_frame,
@@ -293,6 +302,11 @@ class FloreriaApp:
         email = self._email_var.get().strip() if self._email_var is not None else ""
         password = self._password_var.get() if self._password_var is not None else ""
 
+        if self._login_button is not None and str(self._login_button["state"]) == tk.DISABLED:
+            if self._status_var is not None:
+                self._status_var.set("Debe crear un administrador antes de iniciar sesión")
+            return
+
         try:
             authenticate(email, password, connection=self._connection)
         except AuthenticationError as exc:
@@ -311,6 +325,60 @@ class FloreriaApp:
         if self._main_window is not None:
             self._main_window.navigation.reset()
         self._show_login_view()
+
+    def _set_login_enabled(self, enabled: bool) -> None:
+        if tk is None:
+            return
+        if self._login_button is not None:
+            self._login_button.configure(state=tk.NORMAL if enabled else tk.DISABLED)
+
+    def _ensure_initial_admin(self) -> None:
+        if tk is None or self._root is None:
+            return
+
+        try:
+            has_users = self._user_service.has_active_users(self._connection)
+        except Exception:  # pragma: no cover - fallback logging
+            LOGGER.exception("No se pudo verificar la existencia de usuarios")
+            if self._status_var is not None:
+                self._status_var.set("Error verificando usuarios. Revise la conexión a la base de datos.")
+            return
+
+        if has_users:
+            self._set_login_enabled(True)
+            if self._status_var is not None and "No hay usuarios" in self._status_var.get():
+                self._status_var.set("")
+            return
+
+        self._set_login_enabled(False)
+        if self._status_var is not None:
+            self._status_var.set(
+                "No hay usuarios registrados. Cree un administrador para continuar."
+            )
+
+        if self._admin_dialog is None:
+            self._admin_dialog = InitialAdminDialog(
+                self._root,
+                user_service=self._user_service,
+                connection=self._connection,
+                on_success=self._on_initial_admin_created,
+                on_close=self._on_initial_admin_dialog_closed,
+            )
+
+    def _on_initial_admin_created(self, email: str) -> None:
+        self._admin_dialog = None
+        if self._email_var is not None:
+            self._email_var.set(email)
+        if self._password_var is not None:
+            self._password_var.set("")
+        if self._status_var is not None:
+            self._status_var.set("Administrador creado. Ingrese sus credenciales.")
+        self._set_login_enabled(True)
+
+    def _on_initial_admin_dialog_closed(self) -> None:
+        self._admin_dialog = None
+        if tk is not None and self._root is not None:
+            self._root.after(800, self._ensure_initial_admin)
 
     @requires_role("ADMIN")
     def _open_admin_panel(self) -> None:
@@ -396,10 +464,21 @@ def parse_mysql_dsn(dsn: str) -> Dict[str, Any]:
 
 
 def open_db_connection(dsn: str) -> MySQLConnection:
-    """Abre una conexión MySQL usando un DSN."""
+    """Abre una conexión MySQL usando un DSN, asegurando el esquema requerido."""
 
     params = parse_mysql_dsn(dsn)
-    LOGGER.debug("Conectando a MySQL con parámetros: %s", {k: v for k, v in params.items() if k != "password"})
+    LOGGER.debug(
+        "Conectando a MySQL con parámetros: %s",
+        {k: v for k, v in params.items() if k != "password"},
+    )
+
+    schema = params.get("database") or "floreriadb"
+    server_params = {k: v for k, v in params.items() if k != "database"}
+
+    with closing(mysql.connector.connect(**server_params)) as server_connection:
+        initialize_database(server_connection, schema, logger=LOGGER)
+
+    params["database"] = schema
     connection = mysql.connector.connect(**params)
     return connection
 
