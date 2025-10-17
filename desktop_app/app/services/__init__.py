@@ -11,6 +11,7 @@ from .auth_service import (
     logout,
     verify_password,
 )
+from .branding_service import BrandingInfo, get_branding
 
 __all__ = [
     "AuthenticationError",
@@ -22,4 +23,6 @@ __all__ = [
     "log_audit",
     "logout",
     "verify_password",
+    "BrandingInfo",
+    "get_branding",
 ]
