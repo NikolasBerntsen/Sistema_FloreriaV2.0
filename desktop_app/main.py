@@ -14,6 +14,12 @@ import mysql.connector
 from mysql.connector.connection import MySQLConnection
 
 try:
+    from dotenv import find_dotenv, load_dotenv
+except ImportError:  # pragma: no cover - Dependencia opcional en tiempo de ejecución
+    find_dotenv = None  # type: ignore[assignment]
+    load_dotenv = None  # type: ignore[assignment]
+
+try:
     import tkinter as tk
     from tkinter import messagebox
 except Exception:  # pragma: no cover - Tk puede no estar disponible en entornos headless
@@ -390,6 +396,17 @@ def bootstrap() -> None:
     """Carga configuración, abre la conexión a MySQL y lanza la interfaz de usuario."""
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+
+    if load_dotenv is not None and find_dotenv is not None:
+        dotenv_path = find_dotenv()
+        if dotenv_path:
+            load_dotenv(dotenv_path=dotenv_path, override=False)
+            LOGGER.info("Variables de entorno cargadas desde %s", dotenv_path)
+    elif Path(".env").exists():  # pragma: no cover - Ruta de respaldo sin python-dotenv
+        LOGGER.warning(
+            "El archivo .env está presente pero python-dotenv no está instalado. "
+            "Instálalo para cargar variables automáticamente."
+        )
 
     config_path = os.getenv("FLORERIA_CONFIG_PATH")
     config = load_local_config(config_path)
