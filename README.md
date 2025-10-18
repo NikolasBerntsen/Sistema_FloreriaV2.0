@@ -1,101 +1,98 @@
-# Aplicación de escritorio Florería Carlitos
+# Aplicación de escritorio Florería Carlitos (v2)
 
-Este directorio contiene el esqueleto de la aplicación de escritorio para Florería Carlitos, 
-construida sobre Python y Tkinter. A continuación se describe el flujo recomendado para la 
-instalación local, las variables de entorno necesarias y el proceso para generar un ejecutable 
-para Windows.
+La solución de Florería Carlitos evoluciona hacia una interfaz moderna basada en
+React + TypeScript empaquetada con Electron. El antiguo cliente Tkinter quedó en
+estado de legado (consultar `docs/ui_inventory.md` para referencias históricas) y
+ahora todo el flujo de autenticación, gestión de clientes y utilitarios CSV se
+atiende desde `web_app/`.
 
-## Requisitos previos
+La distribución final sigue orientada a usuarios de Windows a través de un único
+instalador `.exe` generado con `electron-builder`, manteniendo la facilidad de uso
+por medio de accesos directos al ejecutable.
 
-* Python 3.11 o superior.
-* Acceso a un servidor MySQL accesible desde el equipo local.
-* [pipx](https://pypa.github.io/pipx/) o `pip` para la instalación de dependencias.
+## Requisitos
 
-## Instalación local
+- Node.js 18 o superior (incluye `npm`).
+- Acceso a la nueva API backend de Florería Carlitos (consultar documentación del
+  servicio). Configure la URL base mediante la variable `VITE_API_BASE_URL`.
+- Python 3.8+ opcionalmente, para utilizar `desktop_app/main.py` como lanzador o
+  integrarlo en procesos existentes.
 
-1. Clonar el repositorio y ubicarse en la carpeta `desktop_app/`:
+## Configuración inicial
+
+1. Instalar dependencias del front-end:
    ```bash
-   git clone <url-del-repo>
-   cd Sistema_FloreriaV2.0/desktop_app
+   cd web_app
+   npm install
    ```
-2. Crear y activar un entorno virtual (opcional pero recomendado):
+2. Crear un archivo `.env` opcional en `web_app/` para personalizar variables:
    ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # En Windows usar .venv\Scripts\activate
+   VITE_API_BASE_URL=https://api.floreriacarlitos.local
    ```
-3. Instalar las dependencias del proyecto:
+3. Ejecutar en modo desarrollo (Vite + Electron en caliente):
    ```bash
-   pip install -r requirements.txt
+   npm run dev
+   # o bien, desde la raíz del repo
+   python desktop_app/main.py dev
    ```
-4. Configurar las variables de entorno descritas más abajo antes de ejecutar la aplicación.
-5. Ejecutar la aplicación en modo desarrollo:
+
+El comando `python desktop_app/main.py` sin argumentos intenta localizar un
+paquete ya construido (`dist-electron/`) y, en su defecto, abre la versión
+estática (`dist/`) o lanza el modo desarrollo.
+
+## Flujo de construcción y empaquetado
+
+1. Generar la build de producción e instalador Windows:
    ```bash
-   python main.py
+   cd web_app
+   npm run build:electron
    ```
+2. El instalador (`Florería Carlitos Setup <versión>.exe`) y las variantes
+   portables quedarán en `web_app/dist-electron/`.
+3. Distribuir el instalador y crear un acceso directo habitual en el escritorio.
 
-## Inicialización de la base de datos
+> **Sugerencia:** automatice la creación del acceso directo durante la instalación
+> usando las opciones de NSIS incluidas en `electron-builder`.
 
-El repositorio incluye scripts SQL de referencia en la carpeta `db/` para
-crear el esquema principal, las extensiones de inventario y poblar datos
-catálogo básicos. La secuencia recomendada es la siguiente:
+## Estructura principal
 
-```bash
-mysql -u usuario -p floreriadb < db/schema.sql
-mysql -u usuario -p floreriadb < db/extension.sql
-mysql -u usuario -p floreriadb < db/seed.sql
-```
+- `web_app/`: código fuente React + TypeScript, providers para autenticación y
+  notificaciones, rutas de clientes, utilidades CSV y scripts de empaquetado.
+- `desktop_app/main.py`: lanzador multiplataforma que delega la ejecución al
+  proyecto web (modo desarrollo o binarios empaquetados).
+- `docs/ui_inventory.md`: inventario completo de pantallas heredadas en Tkinter
+  que sirvió como base para alcanzar paridad funcional.
+- `db/`: scripts SQL legados (mantener según necesidades de la nueva API).
 
-Si se prefiere automatizar la verificación de tablas antes de ejecutar los
-scripts, utilice el comando:
+## Configuración de la API
 
-```bash
-python -m app.db.migrate --user usuario --password ****** --host 127.0.0.1 --database floreriadb
-```
+El cliente consume la API mediante peticiones autenticadas con bearer tokens.
+Defina la variable `VITE_API_BASE_URL` antes de construir o ejecutar el proyecto
+para apuntar al entorno deseado. Los servicios disponibles incluyen:
 
-El script `app.db.migrate` revisa la presencia de las tablas definidas en
-`db/schema.sql` y `db/extension.sql`, ejecutando los archivos que falten en
-el orden correcto y registrando el resultado en consola.
+- `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`.
+- `GET /customers`, `POST /customers`, `PUT /customers/:id`,
+  `POST /customers/:id/deactivate`.
+- `GET /customers/:id/summary`, `GET /customers/export`,
+  `POST /customers/import` (`mode=preview|commit`).
 
-## Variables de entorno requeridas
+Las respuestas de error son surfaced al usuario con notificaciones equivalentes a
+los `messagebox` de la interfaz Tkinter.
 
-La aplicación lee su configuración desde variables de entorno para localizar el archivo de 
-configuración y establecer la conexión a la base de datos.
+## Desarrollo colaborativo
 
-* `FLORERIA_CONFIG_PATH`: Ruta absoluta al archivo de configuración local (por ejemplo, un
-  archivo INI con preferencias de la aplicación). Si no se establece, la aplicación iniciará
-  con una configuración vacía.
-* `FLORERIA_DB_DSN`: Cadena DSN con las credenciales de acceso a MySQL utilizando el formato
-  `mysql://usuario:password@host:puerto/base_de_datos`. Se permiten parámetros adicionales como
-  `?charset=utf8mb4`. Esta variable es obligatoria para iniciar la aplicación.
+- Correr `npm run lint` y `npm run typecheck` para validar el código TypeScript.
+- Utilizar `npm run dev` durante el desarrollo para aprovechar recarga en vivo.
+- Actualizar las notas de despliegue en esta guía si se añaden nuevos módulos o
+  cambia la configuración requerida.
 
-## Generar el ejecutable
+## Migración desde la versión Tkinter
 
-1. Instalar PyInstaller (si aún no está disponible en el entorno):
-   ```bash
-   pip install pyinstaller
-   ```
-2. Ejecutar el script auxiliar para construir el ejecutable:
-   ```bash
-   python build_exe.py
-   ```
-3. El ejecutable `FloreriaCarlitos.exe` se ubicará en la carpeta `dist/` generada por PyInstaller.
+1. Revise `docs/ui_inventory.md` para identificar la correspondencia de vistas.
+2. Elimine instaladores previos generados con PyInstaller y reemplace los accesos
+   directos por el nuevo instalador Electron.
+3. Mantenga el backend actualizado y asegure compatibilidad con los contratos
+   de la API mencionados arriba.
 
-## Creación del acceso directo en Windows
-
-1. Copiar el archivo `FloreriaCarlitos.exe` generado en una carpeta destino (por ejemplo
-   `C:\Program Files\FloreriaCarlitos`).
-2. Hacer clic derecho sobre el ejecutable y seleccionar **Enviar a → Escritorio (crear acceso directo)**
-   o crear manualmente un acceso directo en la ubicación deseada.
-3. Abrir las propiedades del acceso directo y, en la sección **Inicio en**, establecer la ruta donde
-   residen los archivos de configuración y recursos para asegurar que la aplicación encuentre los
-   archivos necesarios.
-4. (Opcional) Cambiar el icono del acceso directo utilizando un archivo `.ico` generado a partir de los
-   recursos gráficos del proyecto (por ejemplo, usando `pillow`).
-
-## Notas adicionales
-
-* Para distribuir la aplicación en otros equipos, asegúrese de incluir instrucciones para configurar
-  las variables de entorno `FLORERIA_CONFIG_PATH` y `FLORERIA_DB_DSN` (por ejemplo, mediante un script
-  `.bat` que establezca las variables antes de lanzar el ejecutable).
-* Mantenga segura la información de credenciales en el DSN. Considere usar usuarios de MySQL con
-  privilegios limitados específicos para la aplicación.
+Con esta estructura, el proyecto puede seguir empaquetándose en un `.exe`
+único, respetando la experiencia de un doble clic para abrir la aplicación.
