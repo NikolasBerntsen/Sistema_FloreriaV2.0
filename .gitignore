@@ -3,3 +3,11 @@ __pycache__/
 /dist/
 /build/
 *.spec
+
+# Dependencias y artefactos del front-end
+web_app/node_modules/
+web_app/dist/
+web_app/.vite/
+
+# Archivos temporales del sistema
+.DS_Store
