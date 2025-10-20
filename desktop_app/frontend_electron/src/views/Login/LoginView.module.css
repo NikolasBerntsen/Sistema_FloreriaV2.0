@@ -1,0 +1,165 @@
+.container {
+  max-width: 420px;
+  margin: 0 auto;
+  padding: var(--space-12) var(--space-6);
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--space-10);
+  gap: var(--space-3);
+}
+
+.logoBadge {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+  box-shadow: var(--shadow-button);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-neutral-100);
+  font-weight: 700;
+  font-size: 1.25rem;
+}
+
+.logoText {
+  text-align: left;
+}
+
+.title {
+  font-size: var(--font-size-title);
+  margin: 0;
+}
+
+.subtitle {
+  margin: var(--space-1) 0 0;
+  color: var(--color-neutral-600);
+  font-size: var(--font-size-body);
+}
+
+.card {
+  background: var(--color-neutral-100);
+  border-radius: var(--radius-md);
+  padding: var(--space-8);
+  box-shadow: var(--shadow-card);
+  display: grid;
+  gap: var(--space-6);
+}
+
+.field {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.field label {
+  font-size: var(--font-size-label);
+  font-weight: 600;
+  color: var(--color-neutral-600);
+}
+
+.inputWrapper {
+  display: flex;
+  align-items: center;
+  background: var(--color-neutral-200);
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  transition:
+    border-color var(--transition-base),
+    box-shadow var(--transition-base);
+}
+
+.inputWrapper:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.2);
+}
+
+.field input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--font-size-body);
+  color: var(--color-neutral-900);
+}
+
+.field input:focus {
+  outline: none;
+}
+
+.helper {
+  font-size: var(--font-size-small);
+  color: var(--color-neutral-400);
+}
+
+.errorText {
+  font-size: var(--font-size-small);
+  color: var(--color-danger);
+}
+
+.actions {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.buttonPrimary {
+  border: none;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  font-size: var(--font-size-body);
+  color: var(--color-neutral-100);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+  cursor: pointer;
+  transition:
+    transform var(--transition-base),
+    box-shadow var(--transition-base);
+}
+
+.buttonPrimary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-button);
+}
+
+.buttonPrimary:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.statusMessage {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--font-size-label);
+}
+
+.statusSuccess {
+  background: rgba(22, 163, 74, 0.12);
+  color: var(--color-success);
+}
+
+.statusError {
+  background: rgba(220, 38, 38, 0.12);
+  color: var(--color-danger);
+}
+
+.secondaryAction {
+  font-size: var(--font-size-small);
+  color: var(--color-neutral-400);
+  text-align: center;
+}
+
+.secondaryAction a {
+  color: var(--color-primary);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.secondaryAction a:hover {
+  text-decoration: underline;
+}
