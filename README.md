@@ -33,6 +33,37 @@ para Windows.
    python main.py
    ```
 
+## Frontend alternativo con Electron + React
+
+El directorio `desktop_app/frontend_electron` contiene una configuración inicial de Electron
+con React y Vite para experimentar con una interfaz moderna reutilizando el backend Python.
+
+### Requisitos
+
+- Node.js 18 o superior.
+- Dependencias Python instaladas (ver sección anterior) para ejecutar el backend de
+  desarrollo basado en FastAPI (`desktop_app/dev_backend.py`).
+
+### Primeros pasos
+
+```bash
+cd desktop_app/frontend_electron
+npm install
+```
+
+### Scripts disponibles
+
+- `npm run dev`: levanta en paralelo el backend de desarrollo con *hot reload* (vía
+  `nodemon` + FastAPI), el servidor de Vite y la aplicación de Electron. Los cambios tanto en
+  los módulos Python del backend como en los componentes de React se reflejan al instante.
+- `npm run build`: genera la versión optimizada del frontend (Vite) y empaqueta la app con
+  `electron-builder`. El resultado queda disponible en `desktop_app/frontend_electron/release/`.
+- `npm run lint` / `npm run format`: ejecutan ESLint y Prettier respectivamente para mantener
+  un estilo de código consistente en la base JavaScript/TypeScript.
+
+Consulta el archivo `desktop_app/frontend_electron/README.md` (si se crea en el futuro) o los
+comentarios en `desktop_app/dev_backend.py` para extender el backend de desarrollo.
+
 ## Inicialización de la base de datos
 
 El repositorio incluye scripts SQL de referencia en la carpeta `db/` para

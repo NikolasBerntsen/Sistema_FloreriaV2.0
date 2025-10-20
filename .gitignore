@@ -3,3 +3,7 @@ __pycache__/
 /dist/
 /build/
 *.spec
+desktop_app/frontend_electron/node_modules/
+desktop_app/frontend_electron/dist/
+desktop_app/frontend_electron/release/
+desktop_app/frontend_electron/.vite/
