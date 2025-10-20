@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import PropTypes from 'prop-types';
 import styles from './LoginView.module.css';
 import { login } from '../../services/authService';
 import { colors, typography } from '../../design/tokens';
@@ -28,7 +29,7 @@ function validate(formState) {
   return newErrors;
 }
 
-function LoginView() {
+function LoginView({ onAuthenticated, onQuickLogin }) {
   const [formState, setFormState] = useState(initialFormState);
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -59,6 +60,9 @@ function LoginView() {
         message: `Bienvenido ${response.full_name}, tu sesión está lista.`,
       });
       setFormState(initialFormState);
+      if (typeof onAuthenticated === 'function') {
+        onAuthenticated(response);
+      }
     } catch (error) {
       setStatus({
         type: 'error',
@@ -66,6 +70,12 @@ function LoginView() {
       });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleQuickLoginClick = () => {
+    if (typeof onQuickLogin === 'function') {
+      onQuickLogin();
     }
   };
 
@@ -154,6 +164,14 @@ function LoginView() {
           <button className={styles.buttonPrimary} type="submit" disabled={isSubmitting}>
             {isSubmitting ? 'Verificando…' : 'Ingresar'}
           </button>
+          <button
+            className={styles.buttonDev}
+            type="button"
+            onClick={handleQuickLoginClick}
+            disabled={isSubmitting}
+          >
+            Acceso rápido para desarrollo
+          </button>
         </div>
 
         <p className={styles.secondaryAction}>
@@ -164,5 +182,15 @@ function LoginView() {
     </div>
   );
 }
+
+LoginView.propTypes = {
+  onAuthenticated: PropTypes.func,
+  onQuickLogin: PropTypes.func,
+};
+
+LoginView.defaultProps = {
+  onAuthenticated: undefined,
+  onQuickLogin: undefined,
+};
 
 export default LoginView;

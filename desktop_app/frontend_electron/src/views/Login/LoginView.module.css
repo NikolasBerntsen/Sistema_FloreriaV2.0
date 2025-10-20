@@ -129,6 +129,28 @@
   cursor: not-allowed;
 }
 
+.buttonDev {
+  border: 1px dashed var(--color-primary);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  font-size: var(--font-size-small);
+  color: var(--color-primary);
+  background: rgba(124, 58, 237, 0.08);
+  cursor: pointer;
+  transition: background-color var(--transition-base), color var(--transition-base);
+}
+
+.buttonDev:hover:not(:disabled) {
+  background: rgba(124, 58, 237, 0.16);
+  color: var(--color-primary-dark);
+}
+
+.buttonDev:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .statusMessage {
   display: flex;
   align-items: center;
