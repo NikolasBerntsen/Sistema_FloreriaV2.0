@@ -1,0 +1,12 @@
+appId: com.floreriacarlitos.desktop
+productName: FloreriaCarlitos
+files:
+  - dist/**/*
+  - electron/**/*
+  - package.json
+directories:
+  output: release
+  buildResources: build
+asar: false
+extraMetadata:
+  main: electron/main.js
