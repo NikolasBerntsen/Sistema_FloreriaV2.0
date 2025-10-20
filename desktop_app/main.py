@@ -176,7 +176,7 @@ def launch_electron_frontend(config: Dict[str, Any]) -> int:
     if mode == "development":
         npm_binary = _resolve_command("npm")
         _ensure_node_dependencies(frontend_dir)
-        command = [npm_binary, "run", "dev:electron"]
+        command = [npm_binary, "run", "dev:desktop"]
         node_env = "development"
     elif mode in {"production", "npx", "packaged"}:
         node_env = "production"

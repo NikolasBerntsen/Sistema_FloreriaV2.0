@@ -57,6 +57,9 @@ npm install
 - `npm run dev`: levanta en paralelo el backend de desarrollo con *hot reload* (vía
   `nodemon` + FastAPI), el servidor de Vite y la aplicación de Electron. Los cambios tanto en
   los módulos Python del backend como en los componentes de React se reflejan al instante.
+- `npm run dev:desktop`: inicia únicamente el servidor de Vite y el proceso de Electron. Este
+  comando es el que utiliza `python main.py` para levantar la interfaz cuando el backend ya fue
+  iniciado previamente desde Python.
 - `npm run build`: genera la versión optimizada del frontend (Vite) y empaqueta la app con
   `electron-builder`. El resultado queda disponible en `desktop_app/frontend_electron/release/`.
 - `npm run lint` / `npm run format`: ejecutan ESLint y Prettier respectivamente para mantener

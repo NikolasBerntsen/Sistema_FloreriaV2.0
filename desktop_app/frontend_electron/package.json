@@ -6,6 +6,7 @@
   "type": "commonjs",
   "scripts": {
     "dev": "concurrently -k -p \"{name}\" -n BACKEND,RENDERER,ELECTRON -c blue,green,magenta \"npm:dev:backend\" \"npm:dev:renderer\" \"npm:dev:electron\"",
+    "dev:desktop": "concurrently -k -p \"{name}\" -n RENDERER,ELECTRON -c green,magenta \"npm:dev:renderer\" \"npm:dev:electron\"",
     "dev:backend": "cross-env PYTHONUNBUFFERED=1 PYTHONPATH=.. nodemon --quiet --watch ../app --watch ../main.py --watch ../dev_backend.py --ext py --exec \"python ../dev_backend.py\"",
     "dev:renderer": "vite",
     "dev:electron": "wait-on tcp:5173 && cross-env NODE_ENV=development electron .",
