@@ -52,9 +52,9 @@ Este documento detalla cada una de las variables de entorno que la aplicación d
 
 ### `FLORERIA_BRAND_LOGO`
 
-* **Tipo:** Ruta a un archivo de imagen compatible con Tk (`.png`, `.gif`, `.ppm`).
+* **Tipo:** Ruta a un archivo de imagen consumido por Electron (por ejemplo `.png`, `.jpg` o `.gif`).
 * **Ejemplo:** `/opt/floreria/branding/logo.png`.
-* **Uso:** Permite mostrar un logotipo personalizado en la barra superior de la interfaz. Si la ruta no existe o el archivo no es compatible, se ignora de forma segura.
+* **Uso:** Permite mostrar un logotipo personalizado en la barra superior de la interfaz. Si la ruta no existe o el archivo no es compatible, se ignora de forma segura por el frontend.
 
 ### `FLORERIA_BRAND_TAGLINE`
 
