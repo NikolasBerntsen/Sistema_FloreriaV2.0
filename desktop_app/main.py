@@ -139,6 +139,30 @@ def _resolve_command(binary: str) -> str:
     return resolved
 
 
+def _ensure_node_dependencies(frontend_dir: Path) -> None:
+    """Instala dependencias Node si `node_modules` aún no existe."""
+
+    node_modules = frontend_dir / "node_modules"
+    if node_modules.exists():
+        return
+
+    npm_binary = _resolve_command("npm")
+
+    LOGGER.info("Instalando dependencias de Node en %s", frontend_dir)
+    result = subprocess.run(
+        [npm_binary, "install"],
+        cwd=frontend_dir,
+        env=os.environ.copy(),
+        check=False,
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            "La instalación de dependencias Node falló. Revisa el log anterior y corrige "
+            "el problema (por ejemplo, una versión de Node incompatible)."
+        )
+
+
 def launch_electron_frontend(config: Dict[str, Any]) -> int:
     """Ejecuta el proceso principal de Electron y espera a que finalice."""
 
@@ -151,6 +175,7 @@ def launch_electron_frontend(config: Dict[str, Any]) -> int:
 
     if mode == "development":
         npm_binary = _resolve_command("npm")
+        _ensure_node_dependencies(frontend_dir)
         command = [npm_binary, "run", "dev:electron"]
         node_env = "development"
     elif mode in {"production", "npx", "packaged"}:
@@ -159,6 +184,7 @@ def launch_electron_frontend(config: Dict[str, Any]) -> int:
             command = [binary_override]
         else:
             npx_binary = _resolve_command("npx")
+            _ensure_node_dependencies(frontend_dir)
             command = [npx_binary, "electron", "."]
     else:
         raise ValueError(
