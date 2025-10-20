@@ -1,9 +1,9 @@
 # Aplicación de escritorio Florería Carlitos
 
-Este directorio contiene el esqueleto de la aplicación de escritorio para Florería Carlitos, 
-construida sobre Python y Tkinter. A continuación se describe el flujo recomendado para la 
-instalación local, las variables de entorno necesarias y el proceso para generar un ejecutable 
-para Windows.
+Este directorio contiene la aplicación de escritorio para Florería Carlitos,
+construida sobre Python y un frontend moderno basado en Electron. A continuación se
+describe el flujo recomendado para la instalación local, las variables de entorno
+necesarias y el proceso para generar un ejecutable para Windows.
 
 ## Requisitos previos
 
@@ -33,10 +33,11 @@ para Windows.
    python main.py
    ```
 
-## Frontend alternativo con Electron + React
+## Frontend con Electron + React
 
-El directorio `desktop_app/frontend_electron` contiene una configuración inicial de Electron
-con React y Vite para experimentar con una interfaz moderna reutilizando el backend Python.
+El directorio `desktop_app/frontend_electron` contiene la aplicación Electron que se
+empaqueta junto al backend Python. Electron inicia una ventana basada en React y Vite
+que consume los endpoints locales expuestos por FastAPI.
 
 ### Requisitos
 
