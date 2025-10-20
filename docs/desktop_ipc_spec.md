@@ -13,8 +13,6 @@ Este documento resume las funciones reutilizables existentes en `desktop_app/app
 | `app/services/customer_service.py` | `list_customers(...)` | Devuelve clientes paginados utilizando filtros existentes. | Futuras vistas que consuman listados en el menú principal. |
 | `app/services/customer_service.py` | `get_financial_summary(customer_id, ...)` | Consolida datos de pedidos y pagos, reutilizando repositorios. | Datos iniciales cuando se abra el panel de clientes. |
 | `app/services/user_service.py` | `create_initial_admin(connection, data)` | Alta del primer usuario administrador con auditoría. | Flujo de instalación/activación inicial. |
-| `app/ui/navigation.py` | `NavigationController` | Gestiona navegación y breadcrumbs para la ventana principal. | Serializar menú principal y estado de navegación en IPC. |
-| `app/ui/main_window.py` | `MenuItem` | Modelo para acciones del menú lateral. | Base para la estructura `menu.items` del contrato. |
 
 > Nota: Las funciones señaladas encapsulan reglas de negocio (auditoría, normalización y consultas) que deben centralizarse en el backend. Los canales IPC/HTTP propuestos se apoyan en estas funciones para evitar duplicar lógica en la capa de transporte.
 
@@ -26,8 +24,8 @@ La siguiente tabla resume los canales propuestos. Cada canal puede exponerse com
 | --- | --- | --- | --- |
 | `auth.login` | `POST` | Autenticar usuario y abrir sesión. | `authenticate`, `get_current_session`, `log_audit`. |
 | `auth.logout` | `POST` | Cerrar sesión activa. | `logout`. |
-| `app.menu` | `GET` | Recuperar opciones del menú principal según rol. | `NavigationController`, `MenuItem`. |
-| `app.bootstrap` | `GET` | Entregar datos iniciales (sesión, branding, menús y banderas). | `get_current_session`, `get_branding`, `NavigationController`. |
+| `app.menu` | `GET` | Recuperar opciones del menú principal según rol. | `get_branding`, repositorios de configuración. |
+| `app.bootstrap` | `GET` | Entregar datos iniciales (sesión, branding y banderas). | `get_current_session`, `get_branding`. |
 
 ## 3. Esquemas JSON de los contratos
 
@@ -237,7 +235,7 @@ Las estructuras siguientes utilizan JSON Schema draft 2020-12 para describir las
 ## 4. Consideraciones de implementación
 
 1. **Gestión de sesión**: El canal `auth.login` debe delegar en `authenticate` para asegurar la normalización de correo, verificación `bcrypt` y auditoría. El token generado (`Session.token`) puede reutilizarse como identificador de sesión en la capa de transporte.
-2. **Menú dinámico**: Aprovechar `NavigationController` y `MenuItem` para serializar el estado de navegación. El adaptador IPC puede exponer sólo las acciones habilitadas según el rol (`Session.role`).
+2. **Menú dinámico**: Centralizar la definición del menú en el backend (por ejemplo, una tabla o módulo de configuración) para serializar únicamente las acciones habilitadas según el rol (`Session.role`).
 3. **Bootstrapping**: El endpoint `app.bootstrap` combina `get_current_session`, `get_branding` y un generador de menú. Este endpoint puede llamarse inmediatamente después de `auth.login` o en reanudaciones de sesión.
 4. **Auditoría**: Todas las llamadas que cambien estado deben inyectar `actor` y `actor_id` usando `get_current_session()` como se hace en `customer_service`, manteniendo trazabilidad sin duplicar lógica.
 5. **Extensibilidad**: Los esquemas pueden versionarse añadiendo el campo `contractVersion` en las respuestas si se requieren evoluciones futuras.

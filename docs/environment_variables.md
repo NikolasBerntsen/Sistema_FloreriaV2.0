@@ -16,6 +16,7 @@ Este documento detalla cada una de las variables de entorno que la aplicación d
 | `FLORERIA_BRAND_NAME` | No | Nombre comercial que se mostrará en la interfaz. |
 | `FLORERIA_BRAND_LOGO` | No | Ruta a una imagen PNG/GIF utilizada como logotipo. |
 | `FLORERIA_BRAND_TAGLINE` | No | Eslogan o texto secundario mostrado en la cabecera. |
+| `FLORERIA_ELECTRON_BINARY` | No | Ruta al ejecutable de Electron precompilado (omite `npm`/`npx`). |
 
 \*Las variables `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` y `DB_NAME` son necesarias únicamente cuando se ejecuta el script de migraciones `python -m app.db.migrate`. La aplicación de escritorio consume la cadena `FLORERIA_DB_DSN` para conectarse a la base de datos.
 
@@ -52,15 +53,21 @@ Este documento detalla cada una de las variables de entorno que la aplicación d
 
 ### `FLORERIA_BRAND_LOGO`
 
-* **Tipo:** Ruta a un archivo de imagen compatible con Tk (`.png`, `.gif`, `.ppm`).
+* **Tipo:** Ruta a un archivo de imagen consumido por Electron (por ejemplo `.png`, `.jpg` o `.gif`).
 * **Ejemplo:** `/opt/floreria/branding/logo.png`.
-* **Uso:** Permite mostrar un logotipo personalizado en la barra superior de la interfaz. Si la ruta no existe o el archivo no es compatible, se ignora de forma segura.
+* **Uso:** Permite mostrar un logotipo personalizado en la barra superior de la interfaz. Si la ruta no existe o el archivo no es compatible, se ignora de forma segura por el frontend.
 
 ### `FLORERIA_BRAND_TAGLINE`
 
 * **Tipo:** Cadena.
 * **Ejemplo:** `Flores frescas todos los días`.
 * **Uso:** Texto secundario que se renderiza bajo el nombre comercial en la cabecera. Ayuda a reforzar la identidad de marca.
+
+### `FLORERIA_ELECTRON_BINARY`
+
+* **Tipo:** Ruta absoluta al ejecutable de Electron o comando empaquetado.
+* **Ejemplo:** `C:\\Floreria\\electron\\FloreriaCarlitos.exe` (Windows) o `/opt/floreria/FloreriaCarlitos` (Linux).
+* **Uso:** Permite saltar el flujo de desarrollo basado en `npm`/`npx` cuando se distribuye un binario de Electron ya empaquetado. Si no se define, el lanzador verifica que `npm` (modo desarrollo) o `npx` (modo producción) estén disponibles en el `PATH` antes de ejecutar el frontend.
 
 ## Recomendaciones
 

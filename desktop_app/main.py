@@ -6,6 +6,7 @@ import configparser
 import logging
 import os
 import shlex
+import shutil
 import signal
 import subprocess
 import sys
@@ -125,6 +126,43 @@ def launch_backend_process(config: Dict[str, Any]) -> subprocess.Popen[bytes]:
     return process
 
 
+def _resolve_command(binary: str) -> str:
+    """Resuelve la ruta absoluta de un ejecutable disponible en PATH."""
+
+    resolved = shutil.which(binary)
+    if resolved is None:
+        raise FileNotFoundError(
+            f"No se encontró el ejecutable '{binary}'. Añádelo al PATH o especifica "
+            "FLORERIA_ELECTRON_BINARY."
+        )
+
+    return resolved
+
+
+def _ensure_node_dependencies(frontend_dir: Path) -> None:
+    """Instala dependencias Node si `node_modules` aún no existe."""
+
+    node_modules = frontend_dir / "node_modules"
+    if node_modules.exists():
+        return
+
+    npm_binary = _resolve_command("npm")
+
+    LOGGER.info("Instalando dependencias de Node en %s", frontend_dir)
+    result = subprocess.run(
+        [npm_binary, "install"],
+        cwd=frontend_dir,
+        env=os.environ.copy(),
+        check=False,
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            "La instalación de dependencias Node falló. Revisa el log anterior y corrige "
+            "el problema (por ejemplo, una versión de Node incompatible)."
+        )
+
+
 def launch_electron_frontend(config: Dict[str, Any]) -> int:
     """Ejecuta el proceso principal de Electron y espera a que finalice."""
 
@@ -136,14 +174,18 @@ def launch_electron_frontend(config: Dict[str, Any]) -> int:
     binary_override = os.getenv("FLORERIA_ELECTRON_BINARY")
 
     if mode == "development":
-        command = ["npm", "run", "dev:electron"]
+        npm_binary = _resolve_command("npm")
+        _ensure_node_dependencies(frontend_dir)
+        command = [npm_binary, "run", "dev:electron"]
         node_env = "development"
     elif mode in {"production", "npx", "packaged"}:
         node_env = "production"
         if binary_override:
             command = [binary_override]
         else:
-            command = ["npx", "electron", "."]
+            npx_binary = _resolve_command("npx")
+            _ensure_node_dependencies(frontend_dir)
+            command = [npx_binary, "electron", "."]
     else:
         raise ValueError(
             "FLORERIA_DESKTOP_MODE debe ser 'development', 'production' o 'packaged'."
@@ -218,6 +260,9 @@ def bootstrap() -> None:
             raise SystemExit(exit_code)
     except KeyboardInterrupt:
         LOGGER.info("Ejecución interrumpida por el usuario.")
+    except FileNotFoundError as exc:
+        LOGGER.error("No se pudo iniciar uno de los procesos requeridos: %s", exc)
+        raise SystemExit(1) from exc
     finally:
         if backend_process is not None and backend_process.poll() is None:
             LOGGER.info("Deteniendo backend HTTP…")
