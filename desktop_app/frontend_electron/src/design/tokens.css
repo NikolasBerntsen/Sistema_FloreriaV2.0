@@ -1,0 +1,40 @@
+:root {
+  --color-primary: #7c3aed;
+  --color-primary-dark: #5b21b6;
+  --color-primary-soft: #ede9fe;
+  --color-neutral-100: #ffffff;
+  --color-neutral-200: #f3f4f6;
+  --color-neutral-400: #9ca3af;
+  --color-neutral-600: #4b5563;
+  --color-neutral-900: #111827;
+  --color-success: #16a34a;
+  --color-danger: #dc2626;
+
+  --space-0: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-pill: 9999px;
+
+  --shadow-card: 0 20px 40px rgba(124, 58, 237, 0.15);
+  --shadow-button: 0 10px 25px rgba(124, 58, 237, 0.25);
+
+  --font-family-base: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-size-display: 2.5rem;
+  --font-size-title: 1.75rem;
+  --font-size-subtitle: 1.25rem;
+  --font-size-body: 1rem;
+  --font-size-label: 0.875rem;
+  --font-size-small: 0.75rem;
+
+  --transition-base: 200ms ease-in-out;
+}
